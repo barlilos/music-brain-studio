@@ -1,0 +1,5 @@
+{
+  "//": "Solution file. It contains no sources itself — it only points editors at the two real projects.",
+  "files": [],
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
+}

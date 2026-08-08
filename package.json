@@ -1,0 +1,59 @@
+{
+  "name": "music-brain-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop application for managing a hierarchical JSON knowledge base for music projects, research, tasks and creative workflows.",
+  "author": "Bar Lilos",
+  "license": "UNLICENSED",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "postinstall": "install-electron",
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "pnpm typecheck && electron-vite build",
+    "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "package": "pnpm build && electron-builder",
+    "package:win": "pnpm build && electron-builder --win",
+    "package:mac": "pnpm build && electron-builder --mac",
+    "package:linux": "pnpm build && electron-builder --linux"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "electron-winstaller"
+    ]
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0",
+    "vite": "^7.3.6"
+  }
+}

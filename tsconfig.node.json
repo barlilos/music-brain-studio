@@ -1,0 +1,32 @@
+{
+  "//": "Node.js context: Electron main, preload, shared code, and the build config. Deliberately has no DOM lib, so a stray `document` reference here is a compile error.",
+  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["node"],
+    "noEmit": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "paths": {
+      "@main/*": ["./src/main/*"],
+      "@preload/*": ["./src/preload/*"],
+      "@shared/*": ["./src/shared/*"]
+    }
+  }
+}

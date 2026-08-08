@@ -1,0 +1,32 @@
+{
+  "//": "Chromium context: React renderer plus shared code. Deliberately has no Node types, so a stray `fs` or `process` reference here is a compile error.",
+  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "paths": {
+      "@renderer/*": ["./src/renderer/src/*"],
+      "@shared/*": ["./src/shared/*"]
+    }
+  }
+}
