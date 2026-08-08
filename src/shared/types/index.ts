@@ -13,7 +13,8 @@ export interface WindowSize {
 }
 
 /** Any value `JSON.parse` can produce. */
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
 /**
  * The content of an opened project.
