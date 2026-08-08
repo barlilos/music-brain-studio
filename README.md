@@ -3,8 +3,8 @@
 Desktop application for managing a hierarchical JSON knowledge base for music projects,
 research, tasks and creative workflows.
 
-> **Status: foundation only.** The app opens a window showing its name. There is no
-> knowledge base, editor, tree, search or state management yet.
+> **Status: early.** The app can open a JSON project file and display it as a collapsible
+> tree. There is no editing, saving, search or state management yet.
 
 ## Requirements
 
@@ -60,6 +60,20 @@ src/
                 Node and DOM APIs
 ```
 
+### IPC surface
+
+The renderer reaches the main process only through the API the preload script publishes on
+`window`. Channel names live in `src/shared/constants.ts` and payload types in
+`src/shared/types`, so both ends are checked against one definition.
+
+| Channel        | Renderer call              | Does                                            |
+| -------------- | -------------------------- | ----------------------------------------------- |
+| `project:open` | `window.projectApi.open()` | Prompts for a file, reads it, parses it as JSON |
+
+Every outcome — including a dismissed picker, unreadable file, or invalid JSON — comes back as a
+value in a discriminated union rather than a thrown error, because a rejected `invoke` reaches the
+renderer wrapped in Electron's own error text.
+
 ### Path aliases
 
 | Alias         | Resolves to          |
@@ -79,6 +93,19 @@ cannot be an ES module in Electron, so main and preload are bundled as CommonJS 
 the renderer stays ESM through Vite. This also keeps `__dirname` available in main,
 which is what resolves the packaged renderer and preload paths.
 
+## Documentation
+
+Every feature is developed on its own branch and documented in `docs/milestones/` as part of that
+branch — not retrofitted afterwards. Each document is named `<NNN>-<feature-slug>.md` and covers:
+
+**Goal** · **Context** · **Architecture decisions** · **Files changed** · **Verification checklist**
+· **Out of scope** · **Future considerations**
+
+| Milestone                                                                         | What it added                        |
+| --------------------------------------------------------------------------------- | ------------------------------------ |
+| 001 — foundation                                                                  | Electron + React shell (this README) |
+| [002 — open and display project](docs/milestones/002-open-and-display-project.md) | The first IPC surface, and the tree  |
+
 ## Notes
 
 **The Electron binary is installed by a `postinstall` hook.** Electron 43 dropped its own
@@ -97,6 +124,11 @@ terminal, or unset the variable.
 
 ## Deliberately not included yet
 
-No router, state management, persistence layer, IPC surface, test runner, or CSP. The
-preload script is wired and sandboxed but exposes no API — see the comment in
-`src/preload/index.ts` for the intended pattern when the first IPC call is added.
+No router, state management, persistence layer, test runner, or CSP. Application state is
+two `useState` calls in `src/renderer/src/App.tsx`, which is enough for one open project
+and no editing.
+
+The project document is still arbitrary JSON rather than a typed model. `ProjectDocument`
+in `src/shared/types` is the single alias that changes when it becomes one — see
+[milestone 002](docs/milestones/002-open-and-display-project.md) for why the IPC contract
+is written so that swap does not reach it.
