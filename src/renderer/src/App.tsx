@@ -66,7 +66,14 @@ export function App(): JSX.Element {
       <div className="flex min-h-0 flex-1">
         <section className="flex-1 overflow-auto p-3">
           {project ? (
-            <TreeView document={project.document} rootLabel={project.fileName} />
+            // Keyed by path so opening a different project mounts a fresh tree.
+            // Without this, nodes at the same position keep the previous
+            // document's expansion state, which belongs to a different file.
+            <TreeView
+              key={project.filePath}
+              document={project.document}
+              rootLabel={project.fileName}
+            />
           ) : (
             <p className="p-2 text-sm text-neutral-500 dark:text-neutral-400">No project open.</p>
           )}
