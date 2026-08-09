@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "Sample Project",
+  "nodes": [
+    {
+      "title": "Track Ideas",
+      "tags": ["writing", "melody"],
+      "children": [
+        {
+          "title": "Verse riff in D minor",
+          "done": false,
+          "bpm": 96
+        },
+        {
+          "title": "Chorus lift",
+          "done": true,
+          "bpm": 96,
+          "notes": null
+        }
+      ]
+    },
+    {
+      "title": "Research",
+      "tags": ["reference"],
+      "children": [
+        {
+          "title": "Reverb tails on drum bus",
+          "done": false,
+          "links": ["https://example.com/reverb-primer"]
+        }
+      ]
+    }
+  ]
+}

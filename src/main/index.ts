@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { APP_NAME, DEFAULT_WINDOW_SIZE, MIN_WINDOW_SIZE } from '@shared/constants'
+import { registerProjectIpc } from '@main/ipc/project'
 
 /**
  * Injected by electron-vite while the dev server is running. Absent in a
@@ -41,6 +42,10 @@ function createMainWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  // Registered before the first window exists, so no renderer can invoke a
+  // channel that has not been handled yet.
+  registerProjectIpc()
+
   createMainWindow()
 
   // macOS keeps the app alive with no windows; re-create one when re-activated.

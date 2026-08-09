@@ -6,14 +6,20 @@
  * and `sandbox: true`, this file is the only place a renderer-facing API can be
  * created, and it can only be created explicitly.
  *
- * No API is exposed yet: the application has no IPC surface at this stage.
- *
- * When one is needed, the pattern is:
- *   1. Declare the API's shape as a type in `src/shared/types`, so the main and
- *      renderer sides are checked against one definition rather than two.
- *   2. Publish it here with `contextBridge.exposeInMainWorld('<namespace>', ...)`,
- *      forwarding to `ipcRenderer.invoke` — never expose `ipcRenderer` itself.
- *   3. Augment the renderer's `Window` interface so `window.<namespace>` is typed.
+ * Each exposed API is a plain function that forwards to `ipcRenderer.invoke`.
+ * `ipcRenderer` itself is never handed to the page: exposing it would give any
+ * script running in the renderer the ability to reach every channel, which is
+ * exactly the isolation this file exists to preserve.
  */
 
-export {}
+import { contextBridge, ipcRenderer } from 'electron'
+import { IPC_OPEN_PROJECT, PROJECT_API_NAMESPACE } from '@shared/constants'
+import type { OpenProjectResult, ProjectApi } from '@shared/types'
+
+// Typed as `ProjectApi` so this bridge and the renderer that consumes it are
+// checked against the one definition in `@shared/types`.
+const projectApi: ProjectApi = {
+  open: () => ipcRenderer.invoke(IPC_OPEN_PROJECT) as Promise<OpenProjectResult>
+}
+
+contextBridge.exposeInMainWorld(PROJECT_API_NAMESPACE, projectApi)

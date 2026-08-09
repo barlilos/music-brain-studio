@@ -17,3 +17,15 @@ export const MIN_WINDOW_SIZE: WindowSize = {
   width: 800,
   height: 600
 }
+
+/**
+ * IPC channel for opening a project: prompts for a file, reads it, parses it.
+ *
+ * Named here rather than written as a literal in both places, because the main
+ * process handler and the preload caller must agree exactly and a typo would
+ * only surface as a silent no-response at runtime.
+ */
+export const IPC_OPEN_PROJECT = 'project:open'
+
+/** The `window` property the preload script publishes its project API on. */
+export const PROJECT_API_NAMESPACE = 'projectApi'
