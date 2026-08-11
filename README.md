@@ -3,8 +3,9 @@
 Desktop application for managing a hierarchical JSON knowledge base for music projects,
 research, tasks and creative workflows.
 
-> **Status: early.** The app can open a JSON project file and display it as a collapsible
-> tree. There is no editing, saving, search or state management yet.
+> **Status: early.** The app can open a project file and browse it as a hierarchy of Music
+> Brain concepts — domains, areas, projects and tasks — rather than as raw JSON. There is no
+> editing, saving, search or state management yet.
 
 ## Requirements
 
@@ -105,6 +106,7 @@ branch — not retrofitted afterwards. Each document is named `<NNN>-<feature-sl
 | --------------------------------------------------------------------------------- | ------------------------------------ |
 | 001 — foundation                                                                  | Electron + React shell (this README) |
 | [002 — open and display project](docs/milestones/002-open-and-display-project.md) | The first IPC surface, and the tree  |
+| [003 — Music Brain Explorer UI](docs/milestones/003-music-brain-explorer-ui.md)   | The explorer: typed nodes, not JSON  |
 
 ## Notes
 
@@ -132,3 +134,17 @@ The project document is still arbitrary JSON rather than a typed model. `Project
 in `src/shared/types` is the single alias that changes when it becomes one — see
 [milestone 002](docs/milestones/002-open-and-display-project.md) for why the IPC contract
 is written so that swap does not reach it.
+
+## Example projects
+
+Two fixtures live in `examples/`, and both should be opened after any change to
+`src/shared/model/adapter.ts` — they exercise opposite paths through it.
+
+| File                       | What it is for                                                      |
+| -------------------------- | ------------------------------------------------------------------- |
+| `music-brain-project.json` | The real schema, trimmed. Every node kind the registry knows        |
+| `sample-project.json`      | Generic JSON with no `nodeType` at all — the degradation regression |
+
+The second is deliberately unchanged from milestone 002. Because nothing in it declares a
+kind, every node takes the unknown-kind fallback, which makes opening it a whole-tree proof
+that the explorer never drops or mangles a node it does not understand.

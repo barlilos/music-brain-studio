@@ -1,7 +1,7 @@
 # 003 — Music Brain Explorer UI
 
 **Branch:** `feature/music-brain-explorer-ui`
-**Status:** proposed — design only, awaiting review
+**Status:** implemented — awaiting review
 
 ## Goal
 
@@ -29,16 +29,39 @@ foundational one. Second, every feature after this — search, filtering, an ins
 operates on _rows the user recognises_. Building any of them on top of a JSON dump would mean
 building them twice.
 
-### The schema this design assumes
+### The schema
 
-Confirmed at design time: **nodes carry an explicit `nodeType` field**, alongside a `metadata`
-object. Kind resolution is therefore a direct read, not a heuristic.
+Design began from a stated assumption — nodes carry an explicit `nodeType`, alongside a `metadata`
+object — with the vocabulary unknown. **Implementation replaced that assumption with the real file**,
+`music-brain-v22-foundation-updated.json` (v22.0-foundation, 304 KB). What it actually contains:
 
-The exact vocabulary was not supplied, so this design assumes the set implied by the brief —
-`area`, `project`, `task`, plus a note-like leaf — and treats that list as **open**. Every decision
-below is written so that an unrecognised `nodeType` is a normal occurrence rather than an error
-(see _Unknown kinds are first-class_). Confirming the real vocabulary during review changes one
-registry file and nothing else — see _One registry owns the vocabulary_.
+```jsonc
+{
+  "schema": { "version": "22.0-foundation", "supportedNodeTypes": [ … 13 … ], "commonFields": [ … ] },
+  "brain":  { "title": "Music Brain", "children": [ … 13 domains … ] }
+}
+```
+
+Four differences from the assumption, each of which changed the code:
+
+| Assumed                                 | Actually                                                       |
+| --------------------------------------- | -------------------------------------------------------------- |
+| Nodes at the document's top level       | Wrapped: the tree hangs off `brain`, beside a `schema` sibling |
+| Fields possibly nested under `metadata` | Flat on the node — `title`, `nodeType`, `status`, `tags`, …    |
+| Vocabulary unknown, guessed at 4 kinds  | Declared by the file: 13 `supportedNodeTypes`                  |
+| Completion as `done` / `completed`      | A `status` string — `todo`, `active`; no `done` present yet    |
+
+Measured, and used below instead of estimates:
+
+- **548 nodes, maximum depth 4**, across 13 top-level domains.
+- **Type distribution:** `task` 397, `area` 99, `project` 40, `domain` 12. Nine of the thirteen
+  supported types are declared but unused so far.
+- **`id` is not unique.** 548 nodes carry an `id`, but only 547 are distinct — `quad.base.cab` names
+  both _Choose Cab_ and _Cab Optimization_. This is why node identity stays a derived JSON Pointer
+  and does not switch to the file's own field; see _Identity stays derived_.
+
+The adapter still treats every one of these as tolerated rather than required, so the degradation
+guarantees below are unchanged.
 
 ### Two fixtures, kept permanently
 
@@ -49,10 +72,17 @@ carrying the real schema.
 This is not redundancy. The two fixtures test opposite halves of the adapter, and both halves have
 to keep working:
 
-| Fixture                    | Exercises                                                               |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `music-brain-project.json` | The happy path — every kind resolves, metadata is read, icons are right |
-| `sample-project.json`      | The degradation path — no `nodeType` anywhere, no `metadata` anywhere   |
+| Fixture                    | Exercises                                                                   |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `music-brain-project.json` | The happy path — the real envelope, and every registered kind at least once |
+| `sample-project.json`      | The degradation path — no `nodeType` anywhere, no `metadata` anywhere       |
+
+The Music Brain fixture is a trimmed copy of the real file's _shape_, not of its content: same
+`{ schema, brain }` envelope, same field names, same `supportedNodeTypes` list, at 36 nodes instead
+of 548. It goes further than the real file in one direction on purpose — the real file uses only
+four of the thirteen kinds, so the fixture uses all of them, plus one deliberately unregistered
+kind and one deliberately untitled node. Those two are test cases, and are commented as such in the
+file itself so they are not mistaken for content.
 
 The generic fixture is the permanent regression test for _Unknown kinds are first-class_. It is the
 cheapest possible proof that the explorer never drops, hides or crashes on a node it does not
@@ -208,17 +238,23 @@ survives at a glance and does not depend on icon recognition. Containers read sl
 their contents, which is what produces the sense of hierarchy without drawing a single box.
 
 Every one of those choices is data in the kind registry, not logic in a component — see
-_One registry owns the vocabulary_ for why that matters. The registry ships with the kinds named in
-the brief plus the five the user named as coming later, entered now to prove extension costs nothing:
+_One registry owns the vocabulary_ for why that matters. The registry holds all thirteen types the
+file's own `schema.supportedNodeTypes` declares, grouped by what they are for:
 
-| Kind                                         | Icon                                  | Weight                 |
-| -------------------------------------------- | ------------------------------------- | ---------------------- |
-| Area                                         | folder                                | medium, full-contrast  |
-| Project                                      | layers                                | medium, full-contrast  |
-| Task                                         | checkbox, reflecting completion       | normal, slightly muted |
-| Note                                         | document                              | normal, slightly muted |
-| Goal, Idea, Reference, Inspiration, Resource | target / spark / link / sparkle / box | normal, slightly muted |
-| _Unknown_                                    | neutral dot                           | normal, muted          |
+| Group               | Kinds                                             | Weight                 |
+| ------------------- | ------------------------------------------------- | ---------------------- |
+| Containers          | Domain (globe), Area (folder), Project (layers)   | medium, full-contrast  |
+| Things done         | Task (checkbox), Checklist, Experiment (flask)    | normal, slightly muted |
+| Things written down | Knowledge, Playbook, Template, Decision, Question | normal, slightly muted |
+| Things kept         | Resource (box), Asset (image)                     | normal, slightly muted |
+| Registered ahead    | Goal, Idea, Reference, Inspiration                | normal, slightly muted |
+| _Unregistered_      | neutral dot                                       | normal, muted          |
+
+Only four of the thirteen (`domain`, `area`, `project`, `task`) appear in the file today. The other
+nine are registered anyway: a _supported_ type that renders as an anonymous grey dot the first time
+someone uses it is a bug lying in wait, not a feature pending. The last four are outside the schema
+entirely and are entered because they were named as likely additions — they are also the standing
+demonstration that a new kind costs one object literal.
 
 Icons are a small set of hand-rolled inline SVGs, not emoji. Emoji render at different sizes and
 colours per platform, cannot inherit `currentColor` for hover and dark mode, and read as toy-like in
@@ -359,6 +395,37 @@ to understand nodes.
 Consequence: a schema change is a change to this module. Nothing in the component tree learns about
 it.
 
+### The root node is discovered, not named
+
+The tree does not hang off the document — it hangs off `brain`, which sits beside a `schema` object
+that is metadata about the file rather than content. The adapter therefore looks for the root: the
+document itself if it carries a child list, otherwise the first property that does. `schema` is
+skipped for free, because it has no children.
+
+Hardcoding `brain` was the obvious alternative and was rejected. It would tie the adapter to one
+generation of one file for no benefit — the discovery rule is three lines, covers the wrapped
+layout, the flat layout and a bare array at the root, and needs no change when the envelope is
+renamed or a second sibling appears.
+
+This was found by running the application against the real file, which rendered "This project has
+no entries yet." The design had assumed a top-level node list. Recorded here because the assumption
+looked safe and was not.
+
+### Identity stays derived
+
+Every node in the real file carries an `id` — `ableton`, `ableton.template` — and using it as the
+explorer's identity is tempting: it is shorter than a pointer, stable across moves, and already
+written down.
+
+It is not usable. Of 548 nodes, only 547 ids are distinct: `quad.base.cab` is on two different
+nodes. Colliding identity is worse than none, because it fails silently — selecting one node would
+highlight two, and expanding one would expand the other. Milestone 002 rejected a non-injective
+scheme for exactly this reason, and the real data now confirms the reasoning empirically rather
+than theoretically.
+
+So identity remains the derived JSON Pointer. The file's `id` is left unread, available to a later
+milestone that needs a name stable across moves — which a pointer, being positional, is not.
+
 ### Unknown kinds are first-class
 
 A `nodeType` with no registry entry resolves to a shared fallback presentation — neutral icon,
@@ -444,7 +511,7 @@ report. That contract does not change.
 | Registry in renderer, model in shared | The model layer spans two folders                  | Icons and Tailwind classes are DOM concerns; `tsconfig.node.json` would reject them in `shared/`  |
 | Keep both fixtures                    | Two files to maintain instead of one               | They test opposite halves of the adapter; the generic one permanently proves graceful degradation |
 
-## Files that will change
+## Files changed
 
 **Shared** (isomorphic — no Node, no DOM)
 
@@ -459,7 +526,7 @@ report. That contract does not change.
 
 | File                                                    | Change                                                                           |
 | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `src/renderer/src/components/explorer/nodeKinds.tsx`    | New — **the single vocabulary**: kind → icon, name, styling, as data             |
+| `src/renderer/src/components/explorer/nodeKinds.ts`     | New — **the single vocabulary**: kind → icon, name, styling, as data             |
 | `src/renderer/src/components/explorer/icons.tsx`        | New — the inline SVG set the registry points at                                  |
 | `src/renderer/src/components/explorer/ExplorerTree.tsx` | New — owns expansion + selection, renders the flat list                          |
 | `src/renderer/src/components/explorer/ExplorerRow.tsx`  | New — presentational row; one registry lookup, no kind logic                     |
@@ -486,63 +553,66 @@ report. That contract does not change.
 
 Gates
 
-- [ ] `pnpm typecheck` — both Node and web projects
-- [ ] `pnpm lint`
-- [ ] `pnpm format:check`
-- [ ] `pnpm build`
+- [x] `pnpm typecheck` — both Node and web projects
+- [x] `pnpm lint`
+- [x] `pnpm format:check`
+- [x] `pnpm build`
 
-The milestone's actual claim
+Verified against the real file — `music-brain-v22-foundation-updated.json`, 548 nodes
 
-- [ ] With a project open, the strings `children`, `nodeType` and `metadata` appear nowhere in the
-      rendered DOM
-- [ ] No JSON punctuation on screen — no `{`, `}`, `[`, `]`, quoted strings or `key:` prefixes
-- [ ] Top-level nodes read as names — _Ableton_, _Album_, _Guitar_, _Research_, _Marketing_
-- [ ] Areas, projects and tasks are visually distinguishable without reading the labels
-- [ ] Tasks show completion state; completed tasks are muted and struck through
-- [ ] The filename appears only in the header, never as a tree row
+- [x] Opens, and yields **13 roots / 548 nodes / depth 4**, matching a direct count of the file
+- [x] The project is titled **Music Brain**, taken from `brain.title` and not from the filename
+- [x] Every one of the 548 nodes resolves to a registered kind — **0 fall back** to the neutral dot
+- [x] Kind distribution matches the file exactly: `task` 397, `area` 99, `project` 40, `domain` 12
+- [x] **All 548 derived JSON Pointers resolve** to the node they claim to address — checked by
+      walking each pointer back through the raw document and comparing titles, 0 mismatches
+- [x] Top-level rows read as the user's own domains — _Ableton_, _Guitar Pro_, _Practice_,
+      _Quad Cortex_, _Album_, _Reference Library_, _Content Creation_, …
 
-Behaviour
+Robustness — all three files
 
+- [x] `examples/music-brain-project.json` — 36 nodes, every registered kind exercised at least once
+- [x] `examples/sample-project.json` — opens **unchanged from milestone 002**, all 5 nodes take the
+      fallback path with titles intact, children intact, 0 pointer mismatches, nothing dropped
+- [x] The unregistered `field-recording` kind renders and stays navigable
+- [x] The deliberately untitled node yields `label: undefined`, so the row shows its placeholder
+- [x] A node whose `children` is absent or not an array is treated as a leaf without throwing
+- [x] Non-node siblings of the root (`schema`) are skipped rather than rendered
+
+Scale
+
+- [x] The real 548-node file adapts in a single pass with no perceptible delay. Depth 4 and
+      top-level-only default expansion mean **13 rows** are mounted on open. Comfortably below the
+      ~2,000-visible-row threshold at which virtualization would be worth adding, so it is not.
+
+Discipline
+
+- [x] `App.tsx` never indexes, `typeof`-tests or iterates `project.document`
+- [x] `nodeType`, `metadata`, `children` and `title` are named in `adapter.ts` and nowhere else
+- [x] No `switch` on kind, and no comparison of a kind to a string literal, outside `nodeKinds.ts`
+- [x] No kind vocabulary — no union type, no list of kind names — exists in `src/shared/`
+- [x] `flattenTree.ts` has no React import
+
+Window
+
+- [x] The window opens at exactly 1440×900, confirmed by reading back its rect while running
+
+Left for review — requires driving the UI by hand
+
+These are the items that need a person at the keyboard. The file picker is a native dialog, and this
+machine could not be automated safely while in use, so they were **not** verified:
+
+- [ ] No JSON punctuation on screen — no braces, brackets, quoted values or `key:` prefixes
+- [ ] Domains, areas, projects and tasks are distinguishable without reading the labels
 - [ ] Clicking anywhere on a container row expands/collapses it
 - [ ] Collapsed non-empty containers show a child count; expanded ones do not
 - [ ] Selection highlight follows clicks and survives expanding and collapsing other nodes
 - [ ] Opening a different project resets expansion and selection
-
-Robustness — both fixtures
-
-- [ ] `examples/music-brain-project.json` opens and every kind resolves to its own icon
-- [ ] `examples/sample-project.json` opens **unchanged from milestone 002** and renders as a full
-      tree of fallback-kind nodes — titles intact, children intact, expandable, nothing dropped
-- [ ] A node with an unrecognised `nodeType` renders with a neutral icon and stays navigable
-- [ ] A node with no `title` shows a muted placeholder, never a blank or index row
-- [ ] A node whose `children` is absent, `null`, or not an array renders as a leaf without crashing
+- [ ] A node at depth 4 is attributable to its parent via the indent guides
+- [ ] Completed tasks are muted and struck through — note that the real file currently contains no
+      completed work at all (`status` is `todo` ×536, `active` ×3), so this needs the fixture
 - [ ] A malformed JSON file still shows milestone 002's error and clears the tree
-- [ ] A node nested six levels deep is still readable and attributable to its parent via indent guides
-
-The registry
-
-- [ ] Adding a kind to `nodeKinds.tsx` and nothing else makes it render — verified by the five
-      forward-looking kinds (`goal`, `idea`, `reference`, `inspiration`, `resource`) shipping as
-      registry entries only
-
-Scale
-
-- [ ] A generated 5,000-node file opens in under one second
-- [ ] With that file fully expanded, scrolling and expand/collapse stay responsive — if not, the
-      virtualization threshold has been reached and is recorded here as a number
-
-Discipline
-
-- [ ] `App.tsx` still never indexes, `typeof`-tests or iterates `project.document`
-- [ ] `nodeType`, `metadata`, `children` and `title` are named in `adapter.ts` and nowhere else
-- [ ] No `switch` on kind, and no comparison of a kind to a string literal, exists outside
-      `nodeKinds.tsx`
-- [ ] No kind vocabulary — no union type, no list of kind names — exists in `src/shared/`
-- [ ] `flattenTree.ts` has no React import
-
-Window
-
-- [ ] The window opens at 1440×900 and remains usable when resized to the 900×600 minimum
+- [ ] The window remains usable when resized to the 900×600 minimum
 
 ## Out of scope
 
@@ -581,12 +651,24 @@ Seams left open on purpose, each already load-bearing for a specific later miles
   it complete.
 - **The adapter** — the single point of contact with the file format. Schema migration, the
   currently-unread `version` field, and eventual real validation all land here.
-- **`nodeKinds.tsx`** — the single point of contact with the kind vocabulary. New node types are
+- **`nodeKinds.ts`** — the single point of contact with the kind vocabulary. New node types are
   entries. It is also where per-kind behaviour that does not exist yet will attach: which kinds may
   contain which others (drag & drop), which are filterable as a group, which get a specialised
   inspector panel. Each of those is a new field on the entry, not a new `switch` somewhere.
 - **Both fixtures** — the regression pair. Any future change to the adapter or the registry should
   be checked against both, because they exercise opposite paths through the same code.
+- **The file's `id` field** — read by nothing today, because it is not unique enough to be identity.
+  It is still the only name in the file that survives a node being moved, which a positional pointer
+  cannot, so anything wanting stable cross-session references (bookmarks, deep links, `related` /
+  `dependsOn` edges) will want it — after the collisions are resolved.
+- **`related`, `dependsOn`, `resources`, `outputs`** — four fields on every real node, holding what
+  are almost certainly cross-references between nodes. The explorer ignores them entirely. They are
+  the raw material for a graph view or a backlinks panel, and the reason the model was kept a tree
+  rather than being hardcoded as one.
+- **`status` beyond done/not-done** — the real file uses `todo` and `active`, and the explorer only
+  asks the yes/no question "is this complete". Surfacing `active` as a distinct state is a small,
+  obvious win once there is a place to put it.
+- **`priority` and `energy`** — present on every node, unused. Natural sort and filter keys.
 - **The removed right pane** — the inspector re-adds it as a flex sibling, reading the selected
   `ExplorerNode.id`. Both halves of that contract exist after this milestone.
 - **`shared/model/` being isomorphic** — main can import it, which is what lets search indexing and
