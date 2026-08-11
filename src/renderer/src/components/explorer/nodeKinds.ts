@@ -28,16 +28,24 @@
 import type { JSX } from 'react'
 import type { NodeKind } from '@shared/model/node'
 import {
+  AssetIcon,
+  BookIcon,
   BoxIcon,
   CheckboxIcon,
+  ChecklistIcon,
+  DecisionIcon,
   DocumentIcon,
   DotIcon,
+  FlaskIcon,
   FolderIcon,
+  GlobeIcon,
   IdeaIcon,
   LayersIcon,
   LinkIcon,
+  QuestionIcon,
   SparkleIcon,
   TargetIcon,
+  TemplateIcon,
   type NodeIconProps
 } from '@renderer/components/explorer/icons'
 
@@ -73,11 +81,26 @@ const ITEM_LABEL = 'text-neutral-700 dark:text-neutral-300'
 /**
  * Every kind the application knows about, keyed by lower-cased `nodeType`.
  *
- * The last five are not yet produced by any file. They are entered now because
- * they were named as coming, and because their being pure data is the proof that
- * the next kind costs an object literal rather than a change to a component.
+ * The first thirteen are the vocabulary declared by the project schema's
+ * `supportedNodeTypes`. Only four of them (`domain`, `area`, `project`, `task`)
+ * appear in the reference file today; the other nine are registered anyway,
+ * because a supported type that renders as an anonymous dot the first time
+ * someone uses it is a bug waiting rather than a feature pending.
+ *
+ * The last four are not in the schema at all. They are entered because they were
+ * named as likely additions, and because their being pure data is the standing
+ * proof that the next kind costs an object literal rather than a change to any
+ * component.
  */
 export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
+  // ── Containers: the levels the knowledge base is organised by ──
+  domain: {
+    name: 'Domain',
+    Icon: GlobeIcon,
+    iconClassName: 'text-indigo-500 dark:text-indigo-400',
+    labelClassName: CONTAINER_LABEL,
+    showsCompletion: false
+  },
   area: {
     name: 'Area',
     Icon: FolderIcon,
@@ -92,6 +115,8 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     labelClassName: CONTAINER_LABEL,
     showsCompletion: false
   },
+
+  // ── Things that get done ──
   task: {
     name: 'Task',
     Icon: CheckboxIcon,
@@ -99,13 +124,75 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     labelClassName: ITEM_LABEL,
     showsCompletion: true
   },
-  note: {
-    name: 'Note',
-    Icon: DocumentIcon,
+  checklist: {
+    name: 'Checklist',
+    Icon: ChecklistIcon,
     iconClassName: 'text-neutral-400 dark:text-neutral-500',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: true
+  },
+  experiment: {
+    name: 'Experiment',
+    Icon: FlaskIcon,
+    iconClassName: 'text-lime-600 dark:text-lime-400',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: true
+  },
+
+  // ── Things that get written down ──
+  knowledge: {
+    name: 'Knowledge',
+    Icon: DocumentIcon,
+    iconClassName: 'text-sky-500 dark:text-sky-400',
     labelClassName: ITEM_LABEL,
     showsCompletion: false
   },
+  playbook: {
+    name: 'Playbook',
+    Icon: BookIcon,
+    iconClassName: 'text-cyan-600 dark:text-cyan-400',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: false
+  },
+  template: {
+    name: 'Template',
+    Icon: TemplateIcon,
+    iconClassName: 'text-slate-500 dark:text-slate-400',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: false
+  },
+  decision: {
+    name: 'Decision',
+    Icon: DecisionIcon,
+    iconClassName: 'text-orange-500 dark:text-orange-400',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: false
+  },
+  question: {
+    name: 'Question',
+    Icon: QuestionIcon,
+    iconClassName: 'text-pink-500 dark:text-pink-400',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: false
+  },
+
+  // ── Things that are kept ──
+  resource: {
+    name: 'Resource',
+    Icon: BoxIcon,
+    iconClassName: 'text-teal-500 dark:text-teal-400',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: false
+  },
+  asset: {
+    name: 'Asset',
+    Icon: AssetIcon,
+    iconClassName: 'text-emerald-600 dark:text-emerald-400',
+    labelClassName: ITEM_LABEL,
+    showsCompletion: false
+  },
+
+  // ── Not in the schema; registered ahead of use ──
   goal: {
     name: 'Goal',
     Icon: TargetIcon,
@@ -123,7 +210,7 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
   reference: {
     name: 'Reference',
     Icon: LinkIcon,
-    iconClassName: 'text-sky-500 dark:text-sky-400',
+    iconClassName: 'text-blue-500 dark:text-blue-400',
     labelClassName: ITEM_LABEL,
     showsCompletion: false
   },
@@ -131,13 +218,6 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     name: 'Inspiration',
     Icon: SparkleIcon,
     iconClassName: 'text-fuchsia-500 dark:text-fuchsia-400',
-    labelClassName: ITEM_LABEL,
-    showsCompletion: false
-  },
-  resource: {
-    name: 'Resource',
-    Icon: BoxIcon,
-    iconClassName: 'text-teal-500 dark:text-teal-400',
     labelClassName: ITEM_LABEL,
     showsCompletion: false
   }

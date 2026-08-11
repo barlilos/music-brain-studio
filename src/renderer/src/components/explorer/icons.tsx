@@ -135,6 +135,97 @@ export function BoxIcon({ className }: NodeIconProps): JSX.Element {
   )
 }
 
+export function GlobeIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <circle cx="8" cy="8" r="6.25" />
+        <path d="M1.75 8h12.5M8 1.75a10 10 0 0 1 0 12.5a10 10 0 0 1 0-12.5" />
+      </g>
+    </Svg>
+  )
+}
+
+export function BookIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <path d="M2.25 2.75h4a2 2 0 0 1 2 2v8a1.5 1.5 0 0 0-1.5-1.5h-4.5v-8.5Z" />
+        <path d="M13.75 2.75h-4a2 2 0 0 0-2 2v8a1.5 1.5 0 0 1 1.5-1.5h4.5v-8.5Z" />
+      </g>
+    </Svg>
+  )
+}
+
+export function TemplateIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.5" />
+        <path d="M10.75 5.25v-2a1 1 0 0 0-1-1h-6.5a1 1 0 0 0-1 1v6.5a1 1 0 0 0 1 1h2" />
+      </g>
+    </Svg>
+  )
+}
+
+export function FlaskIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <path d="M6.25 1.75v4.5l-3.5 6a1 1 0 0 0 .85 1.5h8.8a1 1 0 0 0 .85-1.5l-3.5-6v-4.5" />
+        <path d="M5.25 1.75h5.5M4.75 10.25h6.5" />
+      </g>
+    </Svg>
+  )
+}
+
+export function DecisionIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <path d="M8 14.25v-5.5" />
+        <path d="M8 8.75 3.25 4.5v-2.75M8 8.75l4.75-4.25v-2.75" />
+        <circle cx="3.25" cy="1.75" r="0.1" />
+      </g>
+    </Svg>
+  )
+}
+
+export function AssetIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+        <path d="m1.75 10.75 3.5-3 3 2.5 2.5-2 3.5 3" />
+        <circle cx="5.75" cy="6" r="1" />
+      </g>
+    </Svg>
+  )
+}
+
+export function QuestionIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <circle cx="8" cy="8" r="6.25" />
+        <path d="M6.25 6.25a1.75 1.75 0 1 1 1.75 2v1.25" />
+        <path d="M8 11.75v.01" />
+      </g>
+    </Svg>
+  )
+}
+
+export function ChecklistIcon({ className }: NodeIconProps): JSX.Element {
+  return (
+    <Svg className={className}>
+      <g>
+        <path d="m1.75 4.25 1.5 1.5 2.5-2.5M1.75 11.25l1.5 1.5 2.5-2.5" />
+        <path d="M8.25 4.25h6M8.25 11.25h6" />
+      </g>
+    </Svg>
+  )
+}
+
 /**
  * The fallback glyph, for a node whose kind has no registry entry.
  *
