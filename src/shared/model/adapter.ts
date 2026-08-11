@@ -98,18 +98,25 @@ function readTags(node: ProjectDocument): string[] {
 }
 
 /**
- * The raw child list, along with the document key it was found under.
+ * The raw child list, along with the document key it was found under, or
+ * `undefined` if this value carries no child list at all.
  *
  * The key is returned rather than assumed because it becomes part of every
  * descendant's JSON Pointer, and a pointer that names the wrong field would not
  * address the node it claims to.
+ *
+ * Presence is distinguished from emptiness because `findRootNode` uses "does
+ * this have a child list" to recognise the root, and a node with zero children
+ * is still a node.
  */
-function readChildEntry(node: ProjectDocument): { key: string; items: ProjectDocument[] } {
+function readChildEntry(
+  node: ProjectDocument
+): { key: string; items: ProjectDocument[] } | undefined {
   for (const key of ['children', 'nodes'] as const) {
     const value = property(node, key)
     if (Array.isArray(value)) return { key, items: value }
   }
-  return { key: 'children', items: [] }
+  return undefined
 }
 
 /**
@@ -119,8 +126,13 @@ function readChildEntry(node: ProjectDocument): { key: string; items: ProjectDoc
  * @param id This node's JSON Pointer, built by the caller from its position.
  */
 function toExplorerNode(node: ProjectDocument, id: string): ExplorerNode {
-  const { key, items } = readChildEntry(node)
-  const childrenId = childNodeId(id, key)
+  const entry = readChildEntry(node)
+  const children =
+    entry === undefined
+      ? []
+      : entry.items.map((child, index) =>
+          toExplorerNode(child, childNodeId(childNodeId(id, entry.key), index))
+        )
 
   return {
     id,
@@ -128,26 +140,83 @@ function toExplorerNode(node: ProjectDocument, id: string): ExplorerNode {
     kind: readKind(node),
     isComplete: readCompletion(node),
     tags: readTags(node),
-    children: items.map((child, index) => toExplorerNode(child, childNodeId(childrenId, index)))
+    children
   }
+}
+
+/** The node whose children form the top level, and its pointer in the document. */
+interface DocumentRoot {
+  node: ProjectDocument
+  pointer: string
+}
+
+/**
+ * Finds the node the tree hangs off, which is not always the document itself.
+ *
+ * Real project files wrap the tree in a envelope alongside metadata about the
+ * file — `{ schema: {…}, brain: { title, children } }` — so the document's own
+ * top level holds no nodes and the root is one step down. Simpler files put the
+ * child list at the top level, and some are a bare array.
+ *
+ * The wrapper key is discovered rather than named. Hardcoding `brain` would tie
+ * the adapter to one generation of one file, and the rule "the root is the first
+ * property that looks like a node" costs nothing extra and covers all three
+ * layouts. Non-node siblings such as `schema` are skipped because they carry no
+ * child list.
+ */
+function findRootNode(document: ProjectDocument): DocumentRoot | undefined {
+  if (readChildEntry(document) !== undefined) {
+    return { node: document, pointer: ROOT_NODE_ID }
+  }
+
+  if (isObject(document)) {
+    for (const [key, value] of Object.entries(document)) {
+      if (readChildEntry(value) !== undefined) {
+        return { node: value, pointer: childNodeId(ROOT_NODE_ID, key) }
+      }
+    }
+  }
+
+  return undefined
 }
 
 /**
  * Adapts a whole document.
  *
- * The document's own root is not turned into a node: a project is presented by
- * its name in the header, and the tree starts at the user's real top-level
- * entries. A bare array at the root is accepted as the node list directly.
+ * The root node is not turned into a row: a project is presented by its name in
+ * the header, and the tree starts at the user's real top-level entries. Its
+ * title is what names the project, falling back to the document's own.
+ *
+ * Node IDs stay derived JSON Pointers even though real files carry an `id` on
+ * every node. Those are not usable as identity — the reference file has 548
+ * nodes and only 547 distinct `id` values, so two different nodes share one.
+ * Colliding IDs would silently merge selection and expansion between unrelated
+ * nodes, which is worse than having no IDs at all.
  *
  * Cost is one pass over the file, at open time. Callers memoize on the document.
  */
 export function toExplorerProject(document: ProjectDocument): ExplorerProject {
-  const roots = Array.isArray(document) ? { key: '', items: document } : readChildEntry(document)
+  // A bare array at the root is the node list itself, and names nothing.
+  if (Array.isArray(document)) {
+    return {
+      name: undefined,
+      roots: document.map((node, index) => toExplorerNode(node, childNodeId(ROOT_NODE_ID, index)))
+    }
+  }
 
-  const rootsId = roots.key === '' ? ROOT_NODE_ID : childNodeId(ROOT_NODE_ID, roots.key)
+  const root = findRootNode(document)
+  const entry = root === undefined ? undefined : readChildEntry(root.node)
 
   return {
-    name: nonEmptyString(property(document, 'name')) ?? nonEmptyString(property(document, 'title')),
-    roots: roots.items.map((node, index) => toExplorerNode(node, childNodeId(rootsId, index)))
+    name:
+      (root === undefined ? undefined : readLabel(root.node)) ??
+      nonEmptyString(property(document, 'name')) ??
+      nonEmptyString(property(document, 'title')),
+    roots:
+      root === undefined || entry === undefined
+        ? []
+        : entry.items.map((node, index) =>
+            toExplorerNode(node, childNodeId(childNodeId(root.pointer, entry.key), index))
+          )
   }
 }
