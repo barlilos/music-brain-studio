@@ -1,206 +1,301 @@
 {
-  "version": 1,
-  "name": "Music Brain",
-  "nodes": [
-    {
-      "nodeType": "area",
-      "title": "Ableton",
-      "metadata": { "tags": ["daw", "workflow"] },
-      "children": [
-        {
-          "nodeType": "project",
-          "title": "Template overhaul",
-          "children": [
-            {
-              "nodeType": "task",
-              "title": "Rebuild the default return tracks",
-              "metadata": { "done": true }
-            },
-            {
-              "nodeType": "task",
-              "title": "Set up a drum rack macro layout",
-              "metadata": { "done": false }
-            },
-            {
-              "nodeType": "task",
-              "title": "Decide on a naming convention for group tracks",
-              "metadata": { "status": "done" }
-            }
-          ]
-        },
-        {
-          "nodeType": "reference",
-          "title": "Warp modes and when each one lies to you",
-          "metadata": { "tags": ["reference"] }
-        },
-        {
-          "nodeType": "idea",
-          "title": "Macro rack that swaps the whole drum kit on one knob"
-        }
-      ]
-    },
-    {
-      "nodeType": "area",
-      "title": "Album",
-      "metadata": { "tags": ["2026"] },
-      "children": [
-        {
-          "nodeType": "goal",
-          "title": "Ten finished tracks by December",
-          "metadata": { "done": false }
-        },
-        {
-          "nodeType": "project",
-          "title": "Debut LP",
-          "children": [
-            {
-              "nodeType": "project",
-              "title": "Track 03 — Undertow",
-              "children": [
-                {
-                  "nodeType": "project",
-                  "title": "Mixing",
-                  "children": [
-                    {
-                      "nodeType": "note",
-                      "title": "Drum bus",
-                      "children": [
-                        {
-                          "nodeType": "task",
-                          "title": "Tame the 250 Hz build-up",
-                          "metadata": { "done": false },
-                          "children": [
-                            {
-                              "nodeType": "task",
-                              "title": "A/B against the reference mix at matched loudness",
-                              "metadata": { "done": false }
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "nodeType": "task",
-                      "title": "Automate the vocal rider in the last chorus",
-                      "metadata": { "done": true }
-                    }
-                  ]
-                },
-                {
-                  "nodeType": "task",
-                  "title": "Re-track the bridge vocal",
-                  "metadata": { "done": false, "tags": ["vocals"] }
-                }
-              ]
-            },
-            {
-              "nodeType": "project",
-              "title": "Track 04 — Salt Flats",
-              "children": [
-                {
-                  "nodeType": "task",
-                  "title": "Write the second verse",
-                  "metadata": { "done": false }
-                },
-                {
-                  "nodeType": "inspiration",
-                  "title": "That tape-saturated snare on the 1973 pressing"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nodeType": "area",
-      "title": "Guitar",
-      "children": [
-        {
-          "nodeType": "project",
-          "title": "Technique",
-          "children": [
-            {
-              "nodeType": "task",
-              "title": "Hybrid picking — 15 minutes daily",
-              "metadata": { "done": true, "tags": ["practice"] }
-            },
-            {
-              "nodeType": "task",
-              "title": "Learn the solo from Undertow note for note",
-              "metadata": { "done": false }
-            }
-          ]
-        },
-        {
-          "nodeType": "resource",
-          "title": "Pedalboard signal chain, current",
-          "metadata": { "tags": ["gear"] }
-        },
-        {
-          "nodeType": "note",
-          "title": "Strings: 10-46 nickel, changed every third session"
-        }
-      ]
-    },
-    {
-      "nodeType": "area",
-      "title": "Research",
-      "children": [
-        {
-          "nodeType": "note",
-          "title": "Reverb tails on the drum bus",
-          "metadata": { "tags": ["mixing"] },
-          "children": [
-            {
-              "nodeType": "reference",
-              "title": "Pre-delay as a function of tempo"
-            },
-            {
-              "nodeType": "note",
-              "metadata": { "note": "Deliberately untitled — proves the placeholder path." }
-            }
-          ]
-        },
-        {
-          "nodeType": "field-recording",
-          "title": "Tram brakes, Allenby St, 6am",
-          "metadata": {
-            "note": "Deliberately an unregistered nodeType — proves graceful degradation."
+  "schema": {
+    "version": "22.0-foundation",
+    "purpose": "Foundation schema for WHAT OS Explorer",
+    "supportedNodeTypes": [
+      "domain",
+      "project",
+      "area",
+      "task",
+      "knowledge",
+      "playbook",
+      "template",
+      "resource",
+      "experiment",
+      "decision",
+      "asset",
+      "question",
+      "checklist"
+    ],
+    "commonFields": [
+      "id",
+      "title",
+      "nodeType",
+      "status",
+      "tags",
+      "related",
+      "dependsOn",
+      "resources",
+      "notes",
+      "priority",
+      "energy",
+      "outputs"
+    ]
+  },
+  "brain": {
+    "version": "0.1",
+    "title": "Music Brain",
+    "status": "todo",
+    "tags": [],
+    "notes": "Trimmed fixture mirroring the real file's shape. Every supported nodeType appears at least once so the kind registry is exercised end to end.",
+    "priority": 3,
+    "energy": "medium",
+    "children": [
+      {
+        "id": "ableton",
+        "title": "Ableton",
+        "nodeType": "domain",
+        "status": "active",
+        "tags": ["daw"],
+        "priority": 3,
+        "energy": "medium",
+        "children": [
+          {
+            "id": "ableton.template",
+            "title": "Main Template",
+            "nodeType": "project",
+            "status": "todo",
+            "children": [
+              {
+                "id": "ableton.template.returns",
+                "title": "Rebuild the default return tracks",
+                "nodeType": "task",
+                "status": "done"
+              },
+              {
+                "id": "ableton.template.macros",
+                "title": "Set up a drum rack macro layout",
+                "nodeType": "task",
+                "status": "todo"
+              },
+              {
+                "id": "ableton.template.naming",
+                "title": "Group track naming convention",
+                "nodeType": "decision",
+                "status": "todo",
+                "notes": "Prefix by bus, not by instrument."
+              }
+            ]
+          },
+          {
+            "id": "ableton.warp",
+            "title": "Warp modes and when each one lies to you",
+            "nodeType": "knowledge",
+            "status": "todo",
+            "tags": ["reference"]
+          },
+          {
+            "id": "ableton.startup",
+            "title": "Session start-up checklist",
+            "nodeType": "checklist",
+            "status": "todo"
           }
-        }
-      ]
-    },
-    {
-      "nodeType": "area",
-      "title": "Marketing",
-      "children": [
-        {
-          "nodeType": "project",
-          "title": "Single release",
-          "children": [
-            {
-              "nodeType": "task",
-              "title": "Book the mastering slot",
-              "metadata": { "done": true }
-            },
-            {
-              "nodeType": "task",
-              "title": "Draft the press one-sheet",
-              "metadata": { "done": false }
-            },
-            {
-              "nodeType": "task",
-              "title": "Shoot cover art in the empty lot",
-              "metadata": { "done": false, "tags": ["artwork"] }
-            }
-          ]
-        },
-        {
-          "nodeType": "idea",
-          "title": "Behind-the-scenes clips from the tracking sessions"
-        }
-      ]
-    }
-  ]
+        ]
+      },
+      {
+        "id": "album",
+        "title": "Album",
+        "nodeType": "domain",
+        "status": "active",
+        "tags": ["2026"],
+        "children": [
+          {
+            "id": "album.lp",
+            "title": "Debut LP",
+            "nodeType": "project",
+            "status": "todo",
+            "children": [
+              {
+                "id": "album.lp.undertow",
+                "title": "Track 03 — Undertow",
+                "nodeType": "area",
+                "status": "todo",
+                "children": [
+                  {
+                    "id": "album.lp.undertow.mix",
+                    "title": "Mixing",
+                    "nodeType": "area",
+                    "status": "todo",
+                    "children": [
+                      {
+                        "id": "album.lp.undertow.mix.drums",
+                        "title": "Tame the 250 Hz build-up on the drum bus",
+                        "nodeType": "task",
+                        "status": "todo"
+                      },
+                      {
+                        "id": "album.lp.undertow.mix.rider",
+                        "title": "Automate the vocal rider in the last chorus",
+                        "nodeType": "task",
+                        "status": "done"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "album.lp.undertow.bridge",
+                    "title": "Re-track the bridge vocal",
+                    "nodeType": "task",
+                    "status": "todo",
+                    "tags": ["vocals"]
+                  }
+                ]
+              },
+              {
+                "id": "album.lp.saltflats",
+                "title": "Track 04 — Salt Flats",
+                "nodeType": "area",
+                "status": "todo",
+                "children": [
+                  {
+                    "id": "album.lp.saltflats.verse",
+                    "title": "Write the second verse",
+                    "nodeType": "task",
+                    "status": "todo"
+                  },
+                  {
+                    "id": "album.lp.saltflats.snare",
+                    "title": "Does a tape-saturated snare survive streaming codecs?",
+                    "nodeType": "question",
+                    "status": "todo"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "album.art",
+            "title": "Cover artwork, final",
+            "nodeType": "asset",
+            "status": "todo"
+          }
+        ]
+      },
+      {
+        "id": "guitar",
+        "title": "Guitar Pro",
+        "nodeType": "domain",
+        "status": "active",
+        "children": [
+          {
+            "id": "guitar.technique",
+            "title": "Technique",
+            "nodeType": "area",
+            "status": "todo",
+            "children": [
+              {
+                "id": "guitar.technique.hybrid",
+                "title": "Hybrid picking — 15 minutes daily",
+                "nodeType": "task",
+                "status": "done",
+                "tags": ["practice"]
+              },
+              {
+                "id": "guitar.technique.solo",
+                "title": "Learn the Undertow solo note for note",
+                "nodeType": "task",
+                "status": "todo"
+              }
+            ]
+          },
+          {
+            "id": "guitar.tab-template",
+            "title": "Blank tab template, drop D",
+            "nodeType": "template",
+            "status": "todo"
+          },
+          {
+            "id": "guitar.pedalboard",
+            "title": "Pedalboard signal chain, current",
+            "nodeType": "resource",
+            "status": "todo",
+            "tags": ["gear"]
+          }
+        ]
+      },
+      {
+        "id": "practice",
+        "title": "Practice",
+        "nodeType": "domain",
+        "status": "todo",
+        "children": [
+          {
+            "id": "practice.routine",
+            "title": "Daily warm-up routine",
+            "nodeType": "playbook",
+            "status": "todo"
+          },
+          {
+            "id": "practice.tempo",
+            "title": "Does slow practice at 60% beat metronome laddering?",
+            "nodeType": "experiment",
+            "status": "todo"
+          }
+        ]
+      },
+      {
+        "id": "reference-library",
+        "title": "Reference Library",
+        "nodeType": "domain",
+        "status": "todo",
+        "children": [
+          {
+            "id": "reference-library.reverb",
+            "title": "Reverb tails on the drum bus",
+            "nodeType": "knowledge",
+            "status": "todo",
+            "tags": ["mixing"],
+            "children": [
+              {
+                "id": "reference-library.reverb.predelay",
+                "title": "Pre-delay as a function of tempo",
+                "nodeType": "knowledge",
+                "status": "todo"
+              },
+              {
+                "id": "reference-library.reverb.untitled",
+                "nodeType": "knowledge",
+                "status": "todo",
+                "notes": "Deliberately untitled — exercises the placeholder path."
+              }
+            ]
+          },
+          {
+            "id": "reference-library.field",
+            "title": "Tram brakes, Allenby St, 6am",
+            "nodeType": "field-recording",
+            "status": "todo",
+            "notes": "Deliberately an unregistered nodeType — exercises graceful degradation."
+          }
+        ]
+      },
+      {
+        "id": "content-creation",
+        "title": "Content Creation",
+        "nodeType": "domain",
+        "status": "todo",
+        "children": [
+          {
+            "id": "content-creation.single",
+            "title": "Single release",
+            "nodeType": "project",
+            "status": "todo",
+            "children": [
+              {
+                "id": "content-creation.single.master",
+                "title": "Book the mastering slot",
+                "nodeType": "task",
+                "status": "done"
+              },
+              {
+                "id": "content-creation.single.onesheet",
+                "title": "Draft the press one-sheet",
+                "nodeType": "task",
+                "status": "todo"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }
