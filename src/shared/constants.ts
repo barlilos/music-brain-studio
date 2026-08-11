@@ -6,15 +6,22 @@ import type { WindowSize } from '@shared/types'
  */
 export const APP_NAME = 'Music Brain Studio'
 
-/** Size the main window opens at. */
+/**
+ * Size the main window opens at.
+ *
+ * 1440×900 is the modal laptop logical resolution and still leaves margin on a
+ * 1920-wide display. The extra width over the previous 1200×800 goes to the
+ * explorer, whose rows are long titles that should not truncate, and leaves room
+ * for the detail pane the application is growing towards.
+ */
 export const DEFAULT_WINDOW_SIZE: WindowSize = {
-  width: 1200,
-  height: 800
+  width: 1440,
+  height: 900
 }
 
 /** Smallest size the main window may be resized to. */
 export const MIN_WINDOW_SIZE: WindowSize = {
-  width: 800,
+  width: 900,
   height: 600
 }
 
