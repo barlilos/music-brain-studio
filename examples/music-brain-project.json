@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "name": "Music Brain",
+  "nodes": [
+    {
+      "nodeType": "area",
+      "title": "Ableton",
+      "metadata": { "tags": ["daw", "workflow"] },
+      "children": [
+        {
+          "nodeType": "project",
+          "title": "Template overhaul",
+          "children": [
+            {
+              "nodeType": "task",
+              "title": "Rebuild the default return tracks",
+              "metadata": { "done": true }
+            },
+            {
+              "nodeType": "task",
+              "title": "Set up a drum rack macro layout",
+              "metadata": { "done": false }
+            },
+            {
+              "nodeType": "task",
+              "title": "Decide on a naming convention for group tracks",
+              "metadata": { "status": "done" }
+            }
+          ]
+        },
+        {
+          "nodeType": "reference",
+          "title": "Warp modes and when each one lies to you",
+          "metadata": { "tags": ["reference"] }
+        },
+        {
+          "nodeType": "idea",
+          "title": "Macro rack that swaps the whole drum kit on one knob"
+        }
+      ]
+    },
+    {
+      "nodeType": "area",
+      "title": "Album",
+      "metadata": { "tags": ["2026"] },
+      "children": [
+        {
+          "nodeType": "goal",
+          "title": "Ten finished tracks by December",
+          "metadata": { "done": false }
+        },
+        {
+          "nodeType": "project",
+          "title": "Debut LP",
+          "children": [
+            {
+              "nodeType": "project",
+              "title": "Track 03 — Undertow",
+              "children": [
+                {
+                  "nodeType": "project",
+                  "title": "Mixing",
+                  "children": [
+                    {
+                      "nodeType": "note",
+                      "title": "Drum bus",
+                      "children": [
+                        {
+                          "nodeType": "task",
+                          "title": "Tame the 250 Hz build-up",
+                          "metadata": { "done": false },
+                          "children": [
+                            {
+                              "nodeType": "task",
+                              "title": "A/B against the reference mix at matched loudness",
+                              "metadata": { "done": false }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "nodeType": "task",
+                      "title": "Automate the vocal rider in the last chorus",
+                      "metadata": { "done": true }
+                    }
+                  ]
+                },
+                {
+                  "nodeType": "task",
+                  "title": "Re-track the bridge vocal",
+                  "metadata": { "done": false, "tags": ["vocals"] }
+                }
+              ]
+            },
+            {
+              "nodeType": "project",
+              "title": "Track 04 — Salt Flats",
+              "children": [
+                {
+                  "nodeType": "task",
+                  "title": "Write the second verse",
+                  "metadata": { "done": false }
+                },
+                {
+                  "nodeType": "inspiration",
+                  "title": "That tape-saturated snare on the 1973 pressing"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nodeType": "area",
+      "title": "Guitar",
+      "children": [
+        {
+          "nodeType": "project",
+          "title": "Technique",
+          "children": [
+            {
+              "nodeType": "task",
+              "title": "Hybrid picking — 15 minutes daily",
+              "metadata": { "done": true, "tags": ["practice"] }
+            },
+            {
+              "nodeType": "task",
+              "title": "Learn the solo from Undertow note for note",
+              "metadata": { "done": false }
+            }
+          ]
+        },
+        {
+          "nodeType": "resource",
+          "title": "Pedalboard signal chain, current",
+          "metadata": { "tags": ["gear"] }
+        },
+        {
+          "nodeType": "note",
+          "title": "Strings: 10-46 nickel, changed every third session"
+        }
+      ]
+    },
+    {
+      "nodeType": "area",
+      "title": "Research",
+      "children": [
+        {
+          "nodeType": "note",
+          "title": "Reverb tails on the drum bus",
+          "metadata": { "tags": ["mixing"] },
+          "children": [
+            {
+              "nodeType": "reference",
+              "title": "Pre-delay as a function of tempo"
+            },
+            {
+              "nodeType": "note",
+              "metadata": { "note": "Deliberately untitled — proves the placeholder path." }
+            }
+          ]
+        },
+        {
+          "nodeType": "field-recording",
+          "title": "Tram brakes, Allenby St, 6am",
+          "metadata": {
+            "note": "Deliberately an unregistered nodeType — proves graceful degradation."
+          }
+        }
+      ]
+    },
+    {
+      "nodeType": "area",
+      "title": "Marketing",
+      "children": [
+        {
+          "nodeType": "project",
+          "title": "Single release",
+          "children": [
+            {
+              "nodeType": "task",
+              "title": "Book the mastering slot",
+              "metadata": { "done": true }
+            },
+            {
+              "nodeType": "task",
+              "title": "Draft the press one-sheet",
+              "metadata": { "done": false }
+            },
+            {
+              "nodeType": "task",
+              "title": "Shoot cover art in the empty lot",
+              "metadata": { "done": false, "tags": ["artwork"] }
+            }
+          ]
+        },
+        {
+          "nodeType": "idea",
+          "title": "Behind-the-scenes clips from the tracking sessions"
+        }
+      ]
+    }
+  ]
+}
