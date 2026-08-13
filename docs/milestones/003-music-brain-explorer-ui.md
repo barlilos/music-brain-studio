@@ -33,11 +33,11 @@ building them twice.
 
 Design began from a stated assumption — nodes carry an explicit `nodeType`, alongside a `metadata`
 object — with the vocabulary unknown. **Implementation replaced that assumption with the real file**,
-`music-brain-v22-foundation-updated.json` (v22.0-foundation, 304 KB). What it actually contains:
+now versioned in the repository as `data/music-brain.json` (304 KB). What it actually contains:
 
 ```jsonc
 {
-  "schema": { "version": "22.0-foundation", "supportedNodeTypes": [ … 13 … ], "commonFields": [ … ] },
+  "schema": { "version": …, "supportedNodeTypes": [ … 13 … ], "commonFields": [ … ] },
   "brain":  { "title": "Music Brain", "children": [ … 13 domains … ] }
 }
 ```
@@ -54,8 +54,16 @@ Four differences from the assumption, each of which changed the code:
 Measured, and used below instead of estimates:
 
 - **548 nodes, maximum depth 4**, across 13 top-level domains.
-- **Type distribution:** `task` 397, `area` 99, `project` 40, `domain` 12. Nine of the thirteen
+- **Type distribution:** `task` 397, `area` 99, `project` 39, `domain` 13. Nine of the thirteen
   supported types are declared but unused so far.
+
+  Reviewing this milestone changed the file: at design time twelve top-level nodes were `domain`
+  and one — _Riff Picker_ — was a `project`, the only node in 548 breaking the otherwise strict
+  `domain → project → area → task` grammar. Nothing in the code cared; the explorer rendered it
+  faithfully with a project icon among twelve domain icons. That is what made it visible, and it
+  was reclassified in the data. Worth recording as the milestone's first evidence that giving kinds
+  distinct icons surfaces inconsistencies the raw JSON hid.
+
 - **`id` is not unique.** 548 nodes carry an `id`, but only 547 are distinct — `quad.base.cab` names
   both _Choose Cab_ and _Cab Optimization_. This is why node identity stays a derived JSON Pointer
   and does not switch to the file's own field; see _Identity stays derived_.
@@ -558,12 +566,12 @@ Gates
 - [x] `pnpm format:check`
 - [x] `pnpm build`
 
-Verified against the real file — `music-brain-v22-foundation-updated.json`, 548 nodes
+Verified against the real file — `data/music-brain.json`, 548 nodes
 
 - [x] Opens, and yields **13 roots / 548 nodes / depth 4**, matching a direct count of the file
 - [x] The project is titled **Music Brain**, taken from `brain.title` and not from the filename
 - [x] Every one of the 548 nodes resolves to a registered kind — **0 fall back** to the neutral dot
-- [x] Kind distribution matches the file exactly: `task` 397, `area` 99, `project` 40, `domain` 12
+- [x] Kind distribution matches the file exactly: `task` 397, `area` 99, `project` 39, `domain` 13
 - [x] **All 548 derived JSON Pointers resolve** to the node they claim to address — checked by
       walking each pointer back through the raw document and comparing titles, 0 mismatches
 - [x] Top-level rows read as the user's own domains — _Ableton_, _Guitar Pro_, _Practice_,

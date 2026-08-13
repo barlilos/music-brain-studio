@@ -135,16 +135,23 @@ in `src/shared/types` is the single alias that changes when it becomes one — s
 [milestone 002](docs/milestones/002-open-and-display-project.md) for why the IPC contract
 is written so that swap does not reach it.
 
-## Example projects
+## Project files for development
 
-Two fixtures live in `examples/`, and both should be opened after any change to
-`src/shared/model/adapter.ts` — they exercise opposite paths through it.
+`data/music-brain.json` is the real knowledge base and the **default fixture** — open it
+first when working on anything that reads a project. Two smaller fixtures in `examples/`
+cover cases the real file does not.
 
-| File                       | What it is for                                                      |
-| -------------------------- | ------------------------------------------------------------------- |
-| `music-brain-project.json` | The real schema, trimmed. Every node kind the registry knows        |
-| `sample-project.json`      | Generic JSON with no `nodeType` at all — the degradation regression |
+| File                                | What it is for                                                      |
+| ----------------------------------- | ------------------------------------------------------------------- |
+| `data/music-brain.json`             | The real thing. 548 nodes, depth 4, 13 domains                      |
+| `examples/music-brain-project.json` | Same schema, trimmed. Every node kind the registry knows            |
+| `examples/sample-project.json`      | Generic JSON with no `nodeType` at all — the degradation regression |
 
-The second is deliberately unchanged from milestone 002. Because nothing in it declares a
-kind, every node takes the unknown-kind fallback, which makes opening it a whole-tree proof
-that the explorer never drops or mangles a node it does not understand.
+After any change to `src/shared/model/adapter.ts` or the node kind registry, open all
+three: they exercise different paths, and the real file alone will not catch a regression
+in the others. The real file uses only four of the thirteen declared node types, which is
+why the trimmed fixture exists at all.
+
+`sample-project.json` is deliberately unchanged from milestone 002. Because nothing in it
+declares a kind, every node takes the unknown-kind fallback, which makes opening it a
+whole-tree proof that the explorer never drops or mangles a node it does not understand.
