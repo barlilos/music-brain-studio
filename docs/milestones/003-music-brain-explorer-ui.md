@@ -610,8 +610,16 @@ Gates
 
 - [x] `pnpm typecheck` — both Node and web projects
 - [x] `pnpm lint`
-- [x] `pnpm format:check`
 - [x] `pnpm build`
+- [~] `pnpm format:check` — passes for every file this milestone touched.
+  `examples/sample-project.json` still fails, and did before this branch: it is stored with LF
+  and checked out with CRLF, which Prettier's `endOfLine: "lf"` rejects. Its content diff is
+  empty. The fix is a repo-wide `.gitattributes` (`* text=auto eol=lf`) plus a renormalise,
+  which is deliberately **not** done here — it would touch every file in the repository and has
+  nothing to do with this feature.
+
+  `data/` is excluded via `.prettierignore`: the knowledge base is data, not source, and
+  reformatting it would produce a large diff that says nothing about the code.
 
 Verified against the real file — `data/music-brain.json`, 548 nodes
 
