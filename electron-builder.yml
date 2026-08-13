@@ -10,6 +10,14 @@ files:
   - out/**
   - package.json
 
+# The default project is data, not code, so it ships beside the asar archive
+# rather than inside it. `defaultProjectPath` in src/main/ipc/project.ts looks
+# for it under `process.resourcesPath`, which is where this puts it — keep the
+# two in step.
+extraResources:
+  - from: data
+    to: data
+
 win:
   target: nsis
 

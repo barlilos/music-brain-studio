@@ -13,12 +13,17 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_OPEN_PROJECT, PROJECT_API_NAMESPACE } from '@shared/constants'
-import type { OpenProjectResult, ProjectApi } from '@shared/types'
+import {
+  IPC_LOAD_DEFAULT_PROJECT,
+  IPC_OPEN_PROJECT,
+  PROJECT_API_NAMESPACE
+} from '@shared/constants'
+import type { LoadProjectResult, OpenProjectResult, ProjectApi } from '@shared/types'
 
 // Typed as `ProjectApi` so this bridge and the renderer that consumes it are
 // checked against the one definition in `@shared/types`.
 const projectApi: ProjectApi = {
+  loadDefault: () => ipcRenderer.invoke(IPC_LOAD_DEFAULT_PROJECT) as Promise<LoadProjectResult>,
   open: () => ipcRenderer.invoke(IPC_OPEN_PROJECT) as Promise<OpenProjectResult>
 }
 

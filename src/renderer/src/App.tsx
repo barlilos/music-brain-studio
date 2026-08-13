@@ -1,11 +1,11 @@
-import { useMemo, useState, type JSX } from 'react'
-import type { Project } from '@shared/types'
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
+import type { LoadProjectResult, Project } from '@shared/types'
 import { toExplorerProject } from '@shared/model/adapter'
 import { ExplorerTree } from '@renderer/components/explorer/ExplorerTree'
 import { EmptyState } from '@renderer/components/explorer/EmptyState'
 
 /**
- * The whole application: open a project file, then browse it.
+ * The whole application: open into a project, then browse it.
  *
  * `project.document` is still opaque here — stored, handed to the adapter, never
  * indexed or type-tested. Milestone 002 kept that discipline by letting only
@@ -16,6 +16,9 @@ import { EmptyState } from '@renderer/components/explorer/EmptyState'
 export function App(): JSX.Element {
   const [project, setProject] = useState<Project | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Starts true because the first load begins before the first paint. Without
+  // it the empty state would flash for one frame on every launch.
+  const [isLoading, setIsLoading] = useState(true)
 
   // One pass over the file, at open time rather than on every render.
   const explorer = useMemo(
@@ -23,13 +26,16 @@ export function App(): JSX.Element {
     [project]
   )
 
-  async function openProject(): Promise<void> {
-    const result = await window.projectApi.open()
-
+  /**
+   * Applies any outcome that involved actually reading a file.
+   *
+   * Memoized with no dependencies — every value it closes over is a `useState`
+   * setter, and those are stable for the component's lifetime. That is what lets
+   * the effect below depend on it honestly and still run exactly once, instead
+   * of silencing the dependency rule.
+   */
+  const applyResult = useCallback((result: LoadProjectResult): void => {
     switch (result.status) {
-      case 'canceled':
-        // The user dismissed the picker. Leave whatever is on screen alone.
-        return
       case 'opened':
         setProject(result.project)
         setError(null)
@@ -43,6 +49,33 @@ export function App(): JSX.Element {
         setError(result.message)
         return
     }
+  }, [])
+
+  // Open straight into the default project rather than onto a picker: the
+  // application is single-project for now and is meant to be opened daily.
+  useEffect(() => {
+    let cancelled = false
+
+    void window.projectApi.loadDefault().then((result) => {
+      // The window can be closed mid-read. Setting state on a gone component is
+      // harmless in React 19, but skipping it keeps the intent explicit.
+      if (cancelled) return
+      applyResult(result)
+      setIsLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyResult])
+
+  async function openProject(): Promise<void> {
+    const result = await window.projectApi.open()
+
+    // The user dismissed the picker. Leave whatever is on screen alone.
+    if (result.status === 'canceled') return
+
+    applyResult(result)
   }
 
   return (
@@ -91,7 +124,7 @@ export function App(): JSX.Element {
           // where the same node IDs mean something else.
           <ExplorerTree key={project?.filePath} roots={explorer.roots} />
         ) : (
-          <EmptyState onOpenProject={() => void openProject()} />
+          <EmptyState isLoading={isLoading} onOpenProject={() => void openProject()} />
         )}
       </main>
     </div>

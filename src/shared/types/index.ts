@@ -50,27 +50,43 @@ export interface Project {
 }
 
 /**
- * The outcome of an open request.
+ * The outcome of reading one particular file. No user interaction is involved,
+ * so there is no way for this to be dismissed.
  *
  * Every outcome, including failure, is a return value rather than a rejected
- * promise. Invalid JSON is an expected result of asking a user to pick a file,
- * not an exception — and a thrown error would reach the renderer wrapped in
- * Electron's own `Error invoking remote method` text, losing the real message.
+ * promise. A file that is missing or malformed is an expected result of reading
+ * from disk, not an exception — and a thrown error would reach the renderer
+ * wrapped in Electron's own `Error invoking remote method` text, losing the
+ * real message.
  */
-export type OpenProjectResult =
+export type LoadProjectResult =
   | { status: 'opened'; project: Project }
-  /** The user dismissed the file picker. Not an error; nothing should change. */
-  | { status: 'canceled' }
   /** The file was read, but its content is not valid JSON. */
   | { status: 'invalid'; fileName: string; message: string }
   /** The file could not be read at all — missing, locked, no permission. */
   | { status: 'failed'; message: string }
 
 /**
+ * The outcome of an open request: everything reading a file can produce, plus
+ * the one outcome only a prompt can — the user closing it.
+ */
+export type OpenProjectResult =
+  | LoadProjectResult
+  /** The user dismissed the file picker. Not an error; nothing should change. */
+  | { status: 'canceled' }
+
+/**
  * The API the preload script exposes to the renderer. Declared here so that the
  * bridge and its consumer are checked against one definition rather than two.
  */
 export interface ProjectApi {
+  /**
+   * Reads the project the application opens with. Takes no path: which file
+   * that is, and where it lives in a packaged build, is the main process's
+   * business, and keeping it there means the renderer still cannot name a file
+   * for `readFile` to open.
+   */
+  loadDefault: () => Promise<LoadProjectResult>
   /** Prompts for a project file, then reads and parses it. */
   open: () => Promise<OpenProjectResult>
 }

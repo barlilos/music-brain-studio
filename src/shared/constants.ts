@@ -34,5 +34,22 @@ export const MIN_WINDOW_SIZE: WindowSize = {
  */
 export const IPC_OPEN_PROJECT = 'project:open'
 
+/** IPC channel for reading the project the application opens with. */
+export const IPC_LOAD_DEFAULT_PROJECT = 'project:loadDefault'
+
+/**
+ * The project loaded at startup, relative to the application root.
+ *
+ * The application is single-project for now and opens straight into this file,
+ * because it is being optimised for daily personal use rather than for managing
+ * many projects. **Open Project** still exists alongside it, which is also what
+ * makes a missing or malformed default recoverable without editing anything.
+ *
+ * Resolved against different roots in development and in a packaged build — see
+ * `defaultProjectPath` in `src/main/ipc/project.ts` — so this stays a relative
+ * path and never a location.
+ */
+export const DEFAULT_PROJECT_PATH = 'data/music-brain.json'
+
 /** The `window` property the preload script publishes its project API on. */
 export const PROJECT_API_NAMESPACE = 'projectApi'

@@ -1,26 +1,38 @@
 /**
- * What the application shows before a project is open.
+ * What the application shows when no project is on screen.
  *
- * This is the first screen of every session, so it does more than report the
- * absence of a project: it says what the application is for and offers the one
- * action available. Milestone 002's version was the line "No project open.",
- * which is accurate and teaches nothing.
+ * Two situations reach it, and they need different words. At launch the default
+ * project is still being read, and saying "open a project" would be both wrong
+ * and briefly alarming. Afterwards, the only way to be here is that the default
+ * failed — the error itself is shown in the banner above, so this offers the way
+ * out rather than repeating it.
  */
 
 import type { JSX } from 'react'
 import { APP_NAME } from '@shared/constants'
 
 interface EmptyStateProps {
+  /** Whether the default project is still being read. */
+  isLoading: boolean
   onOpenProject: () => void
 }
 
-export function EmptyState({ onOpenProject }: EmptyStateProps): JSX.Element {
+export function EmptyState({ isLoading, onOpenProject }: EmptyStateProps): JSX.Element {
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-neutral-400 dark:text-neutral-500">Opening…</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="space-y-1.5">
         <h2 className="text-base font-medium text-neutral-800 dark:text-neutral-100">{APP_NAME}</h2>
         <p className="max-w-sm text-sm text-neutral-500 dark:text-neutral-400">
-          Your areas, projects, tasks and research in one place. Open a project to start browsing.
+          Your areas, projects, tasks and research in one place. Open a project file to start
+          browsing.
         </p>
       </div>
 
