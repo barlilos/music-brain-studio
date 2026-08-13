@@ -703,7 +703,38 @@ the reasoning and how to cut it.
 
 ## Future considerations
 
-Seams left open on purpose, each already load-bearing for a specific later milestone:
+### The automatic startup project is temporary
+
+Opening straight into `data/music-brain.json` is a deliberate simplification for this stage, not the
+intended end state. The application is single-project because it is being optimised for one person
+opening it every day, and a fixed default is the shortest path to that. A later milestone replaces
+it with real workspace and project management — recent projects, switching without restarting,
+possibly several open at once.
+
+Nothing here has to be undone to get there, because the shortcut was kept to one place:
+
+- **`DEFAULT_PROJECT_PATH` is the only hardcoded file.** Nothing else in the application assumes
+  which project is open, or that there is exactly one.
+- **`project:loadDefault` is additive.** `project:open` was deliberately kept rather than replaced,
+  so the ability to open any file already exists and does not need rebuilding — what is missing is
+  UI for choosing among projects, not the capability.
+- **`readProject` already takes a path.** A channel that loads a named project is a new caller of a
+  function that exists, not new plumbing. The renderer still must not supply the path; a recent
+  projects list lives in main, and the renderer refers to entries by index or id.
+- **`Project` carries `filePath`.** Milestone 002 kept it for saving; it is equally what a recent
+  projects list and a window title will key on.
+- **`LoadProjectResult` is separate from `OpenProjectResult`.** Loading a known project and
+  prompting for one are already distinct outcomes in the type system, which is the distinction
+  project switching is built on.
+- **Expansion and selection are per-tree state**, keyed by JSON Pointer and reset by remounting on
+  `filePath`. Several projects open at once means several trees, not shared state to untangle.
+
+The one thing that will need revisiting is the assumption that a failed startup load leaves the user
+on an empty screen with a picker. With a project list there is somewhere better to fall back to.
+
+### Seams
+
+Left open on purpose, each already load-bearing for a specific later milestone:
 
 - **`flattenTree`** — takes model + expansion and returns visible rows. Search and filtering enter
   here as an additional predicate parameter; every consumer downstream is unaffected. This is the
