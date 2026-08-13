@@ -3,8 +3,9 @@
 Desktop application for managing a hierarchical JSON knowledge base for music projects,
 research, tasks and creative workflows.
 
-> **Status: early.** The app can open a JSON project file and display it as a collapsible
-> tree. There is no editing, saving, search or state management yet.
+> **Status: early.** The app can open a project file and browse it as a hierarchy of Music
+> Brain concepts — domains, areas, projects and tasks — rather than as raw JSON. There is no
+> editing, saving, search or state management yet.
 
 ## Requirements
 
@@ -66,9 +67,13 @@ The renderer reaches the main process only through the API the preload script pu
 `window`. Channel names live in `src/shared/constants.ts` and payload types in
 `src/shared/types`, so both ends are checked against one definition.
 
-| Channel        | Renderer call              | Does                                            |
-| -------------- | -------------------------- | ----------------------------------------------- |
-| `project:open` | `window.projectApi.open()` | Prompts for a file, reads it, parses it as JSON |
+| Channel               | Renderer call                     | Does                                               |
+| --------------------- | --------------------------------- | -------------------------------------------------- |
+| `project:loadDefault` | `window.projectApi.loadDefault()` | Reads the development default workspace, no dialog |
+| `project:open`        | `window.projectApi.open()`        | Prompts for a file, reads it, parses it            |
+
+Neither channel takes a path. The only two files reachable are the one the user picks in the
+dialog and the fixed default, so the renderer cannot name a file for `readFile` to open.
 
 Every outcome — including a dismissed picker, unreadable file, or invalid JSON — comes back as a
 value in a discriminated union rather than a thrown error, because a rejected `invoke` reaches the
@@ -105,6 +110,7 @@ branch — not retrofitted afterwards. Each document is named `<NNN>-<feature-sl
 | --------------------------------------------------------------------------------- | ------------------------------------ |
 | 001 — foundation                                                                  | Electron + React shell (this README) |
 | [002 — open and display project](docs/milestones/002-open-and-display-project.md) | The first IPC surface, and the tree  |
+| [003 — Music Brain Explorer UI](docs/milestones/003-music-brain-explorer-ui.md)   | The explorer: typed nodes, not JSON  |
 
 ## Notes
 
@@ -125,10 +131,42 @@ terminal, or unset the variable.
 ## Deliberately not included yet
 
 No router, state management, persistence layer, test runner, or CSP. Application state is
-two `useState` calls in `src/renderer/src/App.tsx`, which is enough for one open project
-and no editing.
+three `useState` calls in `src/renderer/src/App.tsx` — the open project, an error, and
+whether the startup load is still running — plus expansion and selection owned by the tree.
+That is enough for one open project and no editing.
 
 The project document is still arbitrary JSON rather than a typed model. `ProjectDocument`
 in `src/shared/types` is the single alias that changes when it becomes one — see
 [milestone 002](docs/milestones/002-open-and-display-project.md) for why the IPC contract
 is written so that swap does not reach it.
+
+## Project files for development
+
+> **During early development, the application automatically opens
+> `data/music-brain.json` as the default workspace.** This is a development convenience,
+> not intended product behaviour. It exists because the app is currently built around one
+> person opening one knowledge base every day, and picking the same file each time is pure
+> friction. A later milestone replaces it with proper workspace and project management —
+> switching without restarting, recent projects, possibly several open at once.
+
+**Open Project** is in the header for anything else, and is the way back if the default is
+missing or malformed. It was deliberately kept rather than replaced, so the ability to open
+any file already exists — what is missing is UI for choosing between projects, not the
+capability.
+
+Two smaller fixtures in `examples/` cover cases the real file does not.
+
+| File                                | What it is for                                                      |
+| ----------------------------------- | ------------------------------------------------------------------- |
+| `data/music-brain.json`             | The real thing. 548 nodes, depth 4, 13 domains                      |
+| `examples/music-brain-project.json` | Same schema, trimmed. Every node kind the registry knows            |
+| `examples/sample-project.json`      | Generic JSON with no `nodeType` at all — the degradation regression |
+
+After any change to `src/shared/model/adapter.ts` or the node kind registry, open all
+three: they exercise different paths, and the real file alone will not catch a regression
+in the others. The real file uses only four of the thirteen declared node types, which is
+why the trimmed fixture exists at all.
+
+`sample-project.json` is deliberately unchanged from milestone 002. Because nothing in it
+declares a kind, every node takes the unknown-kind fallback, which makes opening it a
+whole-tree proof that the explorer never drops or mangles a node it does not understand.

@@ -1,22 +1,67 @@
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
-import { dialog, ipcMain } from 'electron'
-import { IPC_OPEN_PROJECT } from '@shared/constants'
-import type { OpenProjectResult, ProjectDocument } from '@shared/types'
+import { app, dialog, ipcMain } from 'electron'
+import { DEFAULT_PROJECT_PATH, IPC_LOAD_DEFAULT_PROJECT, IPC_OPEN_PROJECT } from '@shared/constants'
+import type { LoadProjectResult, OpenProjectResult, ProjectDocument } from '@shared/types'
 
 /**
  * Project-related IPC.
  *
  * The renderer cannot open a native dialog or touch the filesystem, so both
- * happen here. Note that the renderer does not pass a path — it cannot ask this
- * process to read a file of its choosing. The only input is what the user picks
- * in the dialog, which leaves no room for a renderer-supplied path to reach
- * `readFile`.
+ * happen here. Note that neither channel takes a path — the renderer cannot ask
+ * this process to read a file of its choosing. The only two files reachable are
+ * the one the user picks in the dialog and the fixed default below, which leaves
+ * no room for a renderer-supplied path to reach `readFile`.
  */
 
 /** Turns an unknown thrown value into something displayable. */
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Absolute location of the default project.
+ *
+ * The two builds keep their files in different places, and neither is knowable
+ * from the renderer:
+ *
+ * - **Development** — `app.getAppPath()` is the repository root, so the path
+ *   resolves to the working copy and edits to the file show up on restart.
+ * - **Packaged** — the app is inside an asar archive that `data/` is not part
+ *   of, so it ships alongside via electron-builder's `extraResources` and is
+ *   found under `process.resourcesPath`.
+ */
+function defaultProjectPath(): string {
+  const root = app.isPackaged ? process.resourcesPath : app.getAppPath()
+  return join(root, DEFAULT_PROJECT_PATH)
+}
+
+/**
+ * Reads and parses one file. Shared by both channels so that a project loads
+ * identically however it was chosen, and so failure is described the same way.
+ */
+async function readProject(filePath: string): Promise<LoadProjectResult> {
+  const fileName = basename(filePath)
+
+  let contents: string
+  try {
+    contents = await readFile(filePath, 'utf-8')
+  } catch (error) {
+    return { status: 'failed', message: `Could not read ${fileName}: ${describeError(error)}` }
+  }
+
+  let document: ProjectDocument
+  try {
+    document = JSON.parse(contents) as ProjectDocument
+  } catch (error) {
+    return { status: 'invalid', fileName, message: describeError(error) }
+  }
+
+  return { status: 'opened', project: { filePath, fileName, document } }
+}
+
+function loadDefaultProject(): Promise<LoadProjectResult> {
+  return readProject(defaultProjectPath())
 }
 
 async function openProject(): Promise<OpenProjectResult> {
@@ -38,26 +83,11 @@ async function openProject(): Promise<OpenProjectResult> {
     return { status: 'canceled' }
   }
 
-  const fileName = basename(filePath)
-
-  let contents: string
-  try {
-    contents = await readFile(filePath, 'utf-8')
-  } catch (error) {
-    return { status: 'failed', message: `Could not read ${fileName}: ${describeError(error)}` }
-  }
-
-  let document: ProjectDocument
-  try {
-    document = JSON.parse(contents) as ProjectDocument
-  } catch (error) {
-    return { status: 'invalid', fileName, message: describeError(error) }
-  }
-
-  return { status: 'opened', project: { filePath, fileName, document } }
+  return readProject(filePath)
 }
 
 /** Registers the project handlers. Call once, before the first window opens. */
 export function registerProjectIpc(): void {
+  ipcMain.handle(IPC_LOAD_DEFAULT_PROJECT, loadDefaultProject)
   ipcMain.handle(IPC_OPEN_PROJECT, openProject)
 }

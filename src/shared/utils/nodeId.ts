@@ -1,5 +1,6 @@
 /**
- * Stable identity for a node within a project document.
+ * One way of producing Explorer node identity: derived from position within a
+ * JSON document.
  *
  * A node ID is a domain concept, not a rendering one. It is the address of a
  * node, and it is what selection, editing, search, favorites, navigation and
@@ -7,6 +8,13 @@
  * React as an element `key`, but that is an incidental convenience: `key` is
  * consumed by React's reconciler and cannot even be read back from props,
  * whereas a node ID is passed explicitly, read, stored and acted upon.
+ *
+ * **This module is the current derivation, not the definition.** The contract
+ * lives on `ExplorerNode.id` in `@shared/model/node` — unique, stable,
+ * derivable, opaque — and this file is one implementation of it, appropriate
+ * while the knowledge base is stored as a JSON file. A store with real primary
+ * keys would satisfy the same contract without this module, and no consumer of
+ * an ID would change. Nothing above the model layer parses these strings.
  *
  * IDs are derived from a node's position, never stored in the project file, so
  * they cost nothing to produce and cannot go stale relative to their document.
@@ -16,7 +24,8 @@
  * scheme because that one is not injective — `{ 'a.b': 1 }` and
  * `{ a: { b: 1 } }` would produce the same string, and IDs that collide are
  * worse than no IDs at all. Being a standard also means the same string already
- * works as the address for reading or writing that node later.
+ * works as the address for reading or writing that node in the file it came
+ * from — useful to the adapter, and deliberately not relied on above it.
  */
 
 /** The ID of a document's root node. */
