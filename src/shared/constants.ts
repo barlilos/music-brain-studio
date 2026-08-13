@@ -38,12 +38,18 @@ export const IPC_OPEN_PROJECT = 'project:open'
 export const IPC_LOAD_DEFAULT_PROJECT = 'project:loadDefault'
 
 /**
- * The project loaded at startup, relative to the application root.
+ * The workspace opened at startup, relative to the application root.
  *
- * The application is single-project for now and opens straight into this file,
- * because it is being optimised for daily personal use rather than for managing
- * many projects. **Open Project** still exists alongside it, which is also what
- * makes a missing or malformed default recoverable without editing anything.
+ * **A development convenience, not intended product behaviour.** The
+ * application is currently built around one person opening one knowledge base
+ * every day, so it opens straight into this file rather than asking. A later
+ * milestone replaces it with real workspace and project management.
+ *
+ * This constant is the only place a project file is named. Nothing else assumes
+ * which workspace is open, or that there is exactly one — which is what keeps
+ * that later milestone an addition rather than an unpicking. **Open Project**
+ * exists alongside it, so the capability to open anything else is already there
+ * and a missing or malformed default is recoverable.
  *
  * Resolved against different roots in development and in a packaged build — see
  * `defaultProjectPath` in `src/main/ipc/project.ts` — so this stays a relative

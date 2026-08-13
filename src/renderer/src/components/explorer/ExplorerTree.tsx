@@ -7,9 +7,12 @@
  *
  * Expansion is a `Set` of node IDs rather than a flag on each node's own
  * component, as in milestone 002. That gives O(1) lookups, keeps the state
- * somewhere a future "expand all" or "reveal this node" can reach, and — because
- * the IDs are JSON Pointers — makes it serializable, so persisting expansion per
+ * somewhere a future "expand all" or "reveal this node" can reach, and — since
+ * an ID is a plain string — makes it serializable, so persisting expansion per
  * project later is storage work rather than redesign.
+ *
+ * The IDs are opaque here. Nothing in this file, or below it, parses one or
+ * assumes anything about how it was produced.
  */
 
 import { useMemo, useState, type JSX } from 'react'

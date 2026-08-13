@@ -29,9 +29,18 @@ export const UNKNOWN_NODE_KIND: NodeKind = 'unknown'
 /** A node as the explorer sees it. */
 export interface ExplorerNode {
   /**
-   * Stable identity, and a JSON Pointer into the document it came from. Shared
-   * with milestone 002's `@shared/utils/nodeId`, so it is already a valid
-   * address for reading or writing this node later, not merely a label.
+   * Explorer node identity — the address selection, expansion, search,
+   * favorites, navigation and deep links all refer to this node by.
+   *
+   * The contract is only that it is unique across the loaded knowledge base,
+   * stable while the node is on screen, derivable from the model, and opaque to
+   * everything above it. Nothing outside `./adapter` may parse it or take it
+   * apart.
+   *
+   * How it is produced is a detail of whatever currently stores the knowledge
+   * base — today `@shared/utils/nodeId` derives it from the node's position. A
+   * different store would satisfy the same contract with a primary key or a row
+   * id, and no consumer would change.
    */
   id: string
   /**

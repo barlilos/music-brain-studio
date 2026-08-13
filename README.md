@@ -67,10 +67,10 @@ The renderer reaches the main process only through the API the preload script pu
 `window`. Channel names live in `src/shared/constants.ts` and payload types in
 `src/shared/types`, so both ends are checked against one definition.
 
-| Channel               | Renderer call                     | Does                                            |
-| --------------------- | --------------------------------- | ----------------------------------------------- |
-| `project:loadDefault` | `window.projectApi.loadDefault()` | Reads the startup project, no dialog            |
-| `project:open`        | `window.projectApi.open()`        | Prompts for a file, reads it, parses it as JSON |
+| Channel               | Renderer call                     | Does                                               |
+| --------------------- | --------------------------------- | -------------------------------------------------- |
+| `project:loadDefault` | `window.projectApi.loadDefault()` | Reads the development default workspace, no dialog |
+| `project:open`        | `window.projectApi.open()`        | Prompts for a file, reads it, parses it            |
 
 Neither channel takes a path. The only two files reachable are the one the user picks in the
 dialog and the fixed default, so the renderer cannot name a file for `readFile` to open.
@@ -142,10 +142,17 @@ is written so that swap does not reach it.
 
 ## Project files for development
 
-`data/music-brain.json` is the real knowledge base and **the project the app opens with** —
-it loads automatically at launch, with no file picker. **Open Project** is still in the
-header for anything else, and is the way back if the default is missing or malformed.
-Project switching returns as a real feature in a later milestone.
+> **During early development, the application automatically opens
+> `data/music-brain.json` as the default workspace.** This is a development convenience,
+> not intended product behaviour. It exists because the app is currently built around one
+> person opening one knowledge base every day, and picking the same file each time is pure
+> friction. A later milestone replaces it with proper workspace and project management —
+> switching without restarting, recent projects, possibly several open at once.
+
+**Open Project** is in the header for anything else, and is the way back if the default is
+missing or malformed. It was deliberately kept rather than replaced, so the ability to open
+any file already exists — what is missing is UI for choosing between projects, not the
+capability.
 
 Two smaller fixtures in `examples/` cover cases the real file does not.
 

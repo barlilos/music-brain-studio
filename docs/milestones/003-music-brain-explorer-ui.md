@@ -23,9 +23,8 @@ reads `title: "Track Ideas"` and a container reads `children {2}`. The user has 
 translation in their head on every single row, from the file's structure back to the meaning they
 put into it. That translation is the entire cost this milestone removes.
 
-Two things make now the right time. First, the addressing scheme (`nodeId`, a JSON Pointer) and the
-document-opacity discipline already exist, so the work is a rendering change rather than a
-foundational one. Second, every feature after this — search, filtering, an inspector, drag & drop —
+Two things make now the right time. First, node identity and the document-opacity discipline already
+exist, so the work is a rendering change rather than a foundational one. Second, every feature after this — search, filtering, an inspector, drag & drop —
 operates on _rows the user recognises_. Building any of them on top of a JSON dump would mean
 building them twice.
 
@@ -65,8 +64,8 @@ Measured, and used below instead of estimates:
   distinct icons surfaces inconsistencies the raw JSON hid.
 
 - **`id` is not unique.** 548 nodes carry an `id`, but only 547 are distinct — `quad.base.cab` names
-  both _Choose Cab_ and _Cab Optimization_. This is why node identity stays a derived JSON Pointer
-  and does not switch to the file's own field; see _Identity stays derived_.
+  both _Choose Cab_ and _Cab Optimization_. This is why Explorer node identity stays derived rather
+  than adopting the file's own field; see _Explorer node identity stays derived_.
 
 The adapter still treats every one of these as tolerated rather than required, so the degradation
 guarantees below are unchanged.
@@ -464,20 +463,32 @@ This was found by running the application against the real file, which rendered 
 no entries yet." The design had assumed a top-level node list. Recorded here because the assumption
 looked safe and was not.
 
-### Identity stays derived
+### Explorer node identity stays derived
 
-Every node in the real file carries an `id` — `ableton`, `ableton.template` — and using it as the
-explorer's identity is tempting: it is shorter than a pointer, stable across moves, and already
-written down.
+**`ExplorerNode.id` is an Explorer concept, not a storage one.** It is the address selection,
+expansion, search, favorites, navigation and deep links all refer to a node by. What the Explorer
+requires of it is only this:
 
-It is not usable. Of 548 nodes, only 547 ids are distinct: `quad.base.cab` is on two different
-nodes. Colliding identity is worse than none, because it fails silently — selecting one node would
-highlight two, and expanding one would expand the other. Milestone 002 rejected a non-injective
-scheme for exactly this reason, and the real data now confirms the reasoning empirically rather
-than theoretically.
+- **Unique** across the loaded knowledge base — two nodes must never share one.
+- **Stable** for as long as a node is on screen, so selection and expansion survive re-renders.
+- **Derivable** from the loaded model, so it costs nothing to produce and cannot go stale.
+- **Opaque** to everything above the model. No component parses it or takes it apart.
 
-So identity remains the derived JSON Pointer. The file's `id` is left unread, available to a later
-milestone that needs a name stable across moves — which a pointer, being positional, is not.
+Today the adapter satisfies that contract by deriving a JSON Pointer from the node's position, and
+that is an implementation detail of the current persistence format rather than part of the product
+model. When storage stops being a JSON file — SQLite, Postgres, a service — the same contract can be
+met by a primary key or a row id, and nothing above `src/shared/model/` needs to notice. The
+requirements above are the durable part; the pointer is not.
+
+The reason the file's own `id` is not used is worth recording, because it looks like the obvious
+choice: every node carries one (`ableton`, `ableton.template`), it is shorter, and it survives a node
+being moved. But of 548 nodes only 547 ids are distinct — `quad.base.cab` is on two different nodes.
+Colliding identity is worse than none because it fails silently: selecting one node would highlight
+two, and expanding one would expand the other. Milestone 002 rejected a non-injective scheme for
+exactly this reason; the real data now confirms that empirically rather than theoretically.
+
+So the file's `id` is left unread, available to a later milestone that needs a name stable across
+moves — which a positional derivation is not, whatever the storage layer turns out to be.
 
 ### Unknown kinds are first-class
 
@@ -504,9 +515,9 @@ where nothing can read it.
 
 Replacing it:
 
-- **Expansion is a `Set<nodeId>`** owned by the tree, keyed by the JSON Pointer IDs milestone 002
-  already produces. O(1) checks; serializable, so persisting expansion per project later is storage,
-  not redesign; and addressable, which is what "reveal this node" needs.
+- **Expansion is a `Set<nodeId>`** owned by the tree, keyed by Explorer node identity. O(1) checks;
+  serializable, so persisting expansion per project later is storage, not redesign; and addressable,
+  which is what "reveal this node" needs.
 - **`flattenTree` is a pure function** — model plus expansion set in, flat array of visible rows out.
   No React import, independently testable, and the natural place for filtering and search to insert
   themselves later as an extra parameter.
@@ -627,7 +638,7 @@ Verified against the real file — `data/music-brain.json`, 548 nodes
 - [x] The project is titled **Music Brain**, taken from `brain.title` and not from the filename
 - [x] Every one of the 548 nodes resolves to a registered kind — **0 fall back** to the neutral dot
 - [x] Kind distribution matches the file exactly: `task` 397, `area` 99, `project` 39, `domain` 13
-- [x] **All 548 derived JSON Pointers resolve** to the node they claim to address — checked by
+- [x] **All 548 derived node IDs resolve** to the node they claim to address — checked by
       walking each pointer back through the raw document and comparing titles, 0 mismatches
 - [x] Top-level rows read as the user's own domains — _Ableton_, _Guitar Pro_, _Practice_,
       _Quad Cortex_, _Album_, _Reference Library_, _Content Creation_, …
@@ -734,11 +745,47 @@ Nothing here has to be undone to get there, because the shortcut was kept to one
 - **`LoadProjectResult` is separate from `OpenProjectResult`.** Loading a known project and
   prompting for one are already distinct outcomes in the type system, which is the distinction
   project switching is built on.
-- **Expansion and selection are per-tree state**, keyed by JSON Pointer and reset by remounting on
+- **Expansion and selection are per-tree state**, keyed by node identity and reset by remounting on
   `filePath`. Several projects open at once means several trees, not shared state to untangle.
 
 The one thing that will need revisiting is the assumption that a failed startup load leaves the user
 on an empty screen with a picker. With a project list there is somewhere better to fall back to.
+
+### JSON is today's persistence format, not part of the product model
+
+The Explorer navigates `ExplorerNode`, and `ExplorerNode` describes a knowledge base rather than a
+file. That is deliberate, and it is what makes a change of persistence layer — SQLite, Postgres, a
+service — a change to a small number of modules rather than to the application.
+
+Verified rather than asserted: `src/renderer/src/components/explorer/` contains **no** reference to
+`filePath`, `fileName`, `ProjectDocument` or JSON. The flattener, the tree, the row and the kind
+registry are already storage-agnostic, and would not change if the store did.
+
+What currently keeps that true, and should be preserved:
+
+- **`adapter.ts` is the only module that names a field of the stored format.** Replacing it is how
+  the store changes. Everything else consumes `ExplorerNode`.
+- **Node identity is a contract, not a format.** Unique, stable, derivable, opaque — see
+  _Explorer node identity stays derived_. A JSON Pointer satisfies it today; a primary key would
+  satisfy it equally.
+- **`ProjectDocument` is still `JsonValue`.** That alias is where the format is admitted, and it is
+  the single place a typed or non-file-backed model would replace it.
+- **The IPC contract is written in terms of projects, not files.** `LoadProjectResult` says a project
+  was loaded, not that a file was read. A database-backed loader fits the same union.
+
+The honest caveat, because "storage-independent" is easy to overclaim. Three places do know they are
+dealing with a file, and would all change:
+
+- **`src/main/ipc/project.ts`** — `readProject`, `defaultProjectPath`, the dialog. This is the right
+  place for storage to be visible, and the least surprising to rewrite.
+- **`Project` itself** — `filePath` and `fileName` are file concepts sitting in a shared type.
+- **`App.tsx`** — displays `fileName` beside the project name, keys the tree on `filePath` so a
+  different project remounts, and phrases one error as "is not valid JSON".
+
+So the boundary today runs through the application shell, not through the Explorer. The Explorer is
+clean; `App.tsx` is where storage still shows. A store change would want `Project` to carry a
+generic workspace identity instead of a path — which is the same change project management wants
+anyway, and a reason to expect the two milestones to land together.
 
 ### Seams
 
@@ -749,12 +796,13 @@ Left open on purpose, each already load-bearing for a specific later milestone:
   single most valuable seam the milestone creates.
 - **The row descriptor** — search match ranges, drag handles and context-menu targets are fields
   added to it, not surgery on the tree.
-- **The expansion `Set`** — serializable and keyed by JSON Pointer, so persisting expansion per
-  project is storage work only. Also what "reveal node X" will manipulate: expand every ancestor
-  prefix of a pointer.
-- **`ExplorerNode.id`** — still milestone 002's JSON Pointer, and now the selection value. It is
-  already a valid address for reading or writing the node, so the inspector and deep links inherit
-  it complete.
+- **The expansion `Set`** — serializable and keyed by node identity, so persisting expansion per
+  project is storage work only. Also what "reveal node X" will manipulate: expand every ancestor of
+  the target.
+- **`ExplorerNode.id`** — Explorer node identity, and now the selection value. The inspector and deep
+  links inherit it complete. Because the contract is only unique-stable-derivable-opaque, a change of
+  persistence layer changes how it is produced and nothing that consumes it — see
+  _Explorer node identity stays derived_.
 - **The adapter** — the single point of contact with the file format. Schema migration, the
   currently-unread `version` field, and eventual real validation all land here.
 - **`nodeKinds.ts`** — the single point of contact with the kind vocabulary. New node types are

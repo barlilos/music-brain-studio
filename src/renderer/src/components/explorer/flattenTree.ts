@@ -14,7 +14,7 @@
  *   nodes are emitted. Nothing downstream has to know.
  * - **Virtualization** consumes the array this returns. Rows are a uniform
  *   height, so it is fixed-size windowing rather than the variable-size kind.
- * - **Reveal a node** is expanding every ancestor prefix of its JSON Pointer.
+ * - **Reveal a node** is expanding every ancestor of the target.
  *
  * Deliberately free of React, so it can be reasoned about and tested on its own.
  */
@@ -42,7 +42,7 @@ export interface ExplorerRowModel {
  * virtualization is not needed yet.
  *
  * @param roots Top-level nodes.
- * @param expanded IDs of expanded nodes, as JSON Pointers.
+ * @param expanded Identities of the expanded nodes — see `ExplorerNode.id`.
  */
 export function flattenTree(
   roots: readonly ExplorerNode[],

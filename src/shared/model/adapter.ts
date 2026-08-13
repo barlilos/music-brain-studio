@@ -187,11 +187,13 @@ function findRootNode(document: ProjectDocument): DocumentRoot | undefined {
  * the header, and the tree starts at the user's real top-level entries. Its
  * title is what names the project, falling back to the document's own.
  *
- * Node IDs stay derived JSON Pointers even though real files carry an `id` on
- * every node. Those are not usable as identity — the reference file has 548
- * nodes and only 547 distinct `id` values, so two different nodes share one.
- * Colliding IDs would silently merge selection and expansion between unrelated
- * nodes, which is worse than having no IDs at all.
+ * Node identity is derived here rather than taken from the file, even though
+ * real files carry an `id` on every node. Those are not usable — the reference
+ * file has 548 nodes and only 547 distinct `id` values, so two different nodes
+ * share one. Colliding identity silently merges selection and expansion between
+ * unrelated nodes, which is worse than having no IDs at all. This module is
+ * where that decision lives; see `ExplorerNode.id` for the contract it has to
+ * meet, and note that the contract says nothing about JSON.
  *
  * Cost is one pass over the file, at open time. Callers memoize on the document.
  */
