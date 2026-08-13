@@ -304,16 +304,33 @@ The project's own name becomes a header above the tree, with the filename demote
 text. The tree then starts at the user's real top-level nodes, so the first thing they see is
 _Ableton, Album, Guitar, Research, Marketing_ rather than a filename.
 
-### 10. Default expansion: top level only
+### 10. Default expansion: the root, and nothing below it
 
-Enough to show the shape of the world; not so much that opening a project produces a wall of text.
-It also keeps the initial rendered row count small, which is what defers virtualization honestly.
+The tree opens with every node collapsed. Since the root is the header rather than a row, that is
+the state in which the root alone is expanded: the whole world named at the top level, and nothing
+beneath it yet.
+
+This was revised during implementation. The design originally expanded the top level, on the
+reasoning that showing one layer down helps orient. Measured against the real file, that mounts
+**60 rows** where collapsing everything mounts **13** — and, more importantly, the expanded count
+grows with the file while the collapsed one does not. A default whose cost scales with the size of
+the knowledge base is the wrong default for a knowledge base meant to grow.
+
+The count on each collapsed row is what makes this affordable: you can still see how much sits
+inside each domain without opening it, so the information the extra layer was providing is still
+there, in one line instead of sixty.
+
+Correction worth recording: this document previously claimed top-level expansion mounted 13 rows.
+It did not — it mounted 60. The 13 was the collapsed number all along, asserted for the wrong
+configuration and never measured until now.
 
 ### 11. Empty state
 
-The no-project state becomes a centred short block — what Music Brain Studio is, and the Open
-Project action — rather than the current _No project open._ line. This is the first screen every
-session starts on, so it is worth more than a sentence.
+Two situations reach the no-project screen and they need different words. At launch the default
+project is still being read, so it shows a quiet _Opening…_ — saying "open a project" there would be
+wrong and briefly alarming. Afterwards the only way to be here is that the default failed, so it
+explains what the application is and offers **Open Project** as the way out. The error itself is in
+the banner above, so this does not repeat it.
 
 ### 12. The right pane is removed
 
@@ -402,6 +419,34 @@ to understand nodes.
 
 Consequence: a schema change is a change to this module. Nothing in the component tree learns about
 it.
+
+### The application opens into a project, not onto a picker
+
+Added during implementation. `data/music-brain.json` loads on launch, over a second IPC channel —
+`project:loadDefault` — that reads a fixed file with no dialog.
+
+The product reason is that this is a single-project application being optimised for daily personal
+use. Making someone pick the same file every morning is a tax on the one workflow that matters, and
+"open the app, see my world" is the behaviour the milestone is judged on.
+
+Three things kept it from being a shortcut:
+
+- **`project:open` stays.** The picker is not removed — it is the recovery path when the default is
+  missing or malformed, and it is what keeps arbitrary files openable until project switching
+  returns as a real feature. A startup default that could strand the user would be worse than the
+  picker it replaced.
+- **Neither channel takes a path.** The renderer still cannot name a file for `readFile` to open.
+  The two reachable files are the one the user picks in a dialog and one fixed constant, so
+  milestone 002's "no renderer-supplied paths" property is unchanged.
+- **One reader, two callers.** `readProject` does the read, parse and error description; both
+  channels call it. A project therefore loads identically however it was chosen, and a failure is
+  described the same way. `LoadProjectResult` is the outcome of reading a file, and
+  `OpenProjectResult` is that plus the one outcome only a prompt can produce — `canceled`.
+
+The path is resolved in the main process, not shared as a location: `app.getAppPath()` in
+development so edits to the working copy are picked up on restart, and `process.resourcesPath` in a
+packaged build, where `data/` ships beside the asar archive via electron-builder's `extraResources`.
+Shipping it is easy to forget, so the config and the resolver carry pointers to each other.
 
 ### The root node is discovered, not named
 
@@ -523,12 +568,12 @@ report. That contract does not change.
 
 **Shared** (isomorphic — no Node, no DOM)
 
-| File                          | Change                                                               |
-| ----------------------------- | -------------------------------------------------------------------- |
-| `src/shared/model/node.ts`    | New — `ExplorerNode`. Carries `kind: string`; declares no vocabulary |
-| `src/shared/model/adapter.ts` | New — the only module naming `nodeType` / `metadata` / `children`    |
-| `src/shared/constants.ts`     | `DEFAULT_WINDOW_SIZE` → 1440×900, `MIN_WINDOW_SIZE` → 900×600        |
-| `src/shared/types/index.ts`   | Unchanged — recorded explicitly; `ProjectDocument` stays `JsonValue` |
+| File                          | Change                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared/model/node.ts`    | New — `ExplorerNode`. Carries `kind: string`; declares no vocabulary                                                      |
+| `src/shared/model/adapter.ts` | New — the only module naming `nodeType` / `metadata` / `children`                                                         |
+| `src/shared/constants.ts`     | Window size → 1440×900 / 900×600; adds `IPC_LOAD_DEFAULT_PROJECT` and `DEFAULT_PROJECT_PATH`                              |
+| `src/shared/types/index.ts`   | Splits `LoadProjectResult` out of `OpenProjectResult`; adds `ProjectApi.loadDefault`. `ProjectDocument` still `JsonValue` |
 
 **Renderer**
 
@@ -539,15 +584,17 @@ report. That contract does not change.
 | `src/renderer/src/components/explorer/ExplorerTree.tsx` | New — owns expansion + selection, renders the flat list                          |
 | `src/renderer/src/components/explorer/ExplorerRow.tsx`  | New — presentational row; one registry lookup, no kind logic                     |
 | `src/renderer/src/components/explorer/flattenTree.ts`   | New — pure; the future search/filter insertion point                             |
-| `src/renderer/src/components/explorer/EmptyState.tsx`   | New — the no-project screen                                                      |
+| `src/renderer/src/components/explorer/EmptyState.tsx`   | New — the no-project screen; distinguishes still-loading from failed             |
 | `src/renderer/src/components/TreeView.tsx`              | **Deleted** — fully replaced                                                     |
 | `src/renderer/src/App.tsx`                              | Rewritten — header with project name, single full-width pane, right pane removed |
 
 **Main / preload**
 
-| File | Change                                                |
-| ---- | ----------------------------------------------------- |
-| —    | None. No new IPC, no new channel, no new API surface. |
+| File                      | Change                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `src/main/ipc/project.ts` | `readProject` extracted and shared; `project:loadDefault` added; path resolver |
+| `src/preload/index.ts`    | Exposes `loadDefault` alongside `open`                                         |
+| `electron-builder.yml`    | `extraResources` ships `data/` beside the asar so packaged builds find it      |
 
 **Other**
 
@@ -577,6 +624,16 @@ Verified against the real file — `data/music-brain.json`, 548 nodes
 - [x] Top-level rows read as the user's own domains — _Ableton_, _Guitar Pro_, _Practice_,
       _Quad Cortex_, _Album_, _Reference Library_, _Content Creation_, …
 
+Startup — confirmed by running the built app and capturing its window
+
+- [x] Launching goes straight into the project. No file picker appears
+- [x] The header reads **Music Brain**, with `music-brain.json` demoted beside it
+- [x] All 13 domains render collapsed, chevrons pointing right
+- [x] Each collapsed row shows its child count, and all thirteen match `flattenTree` exactly —
+      7, 1, 5, 8, 3, 3, 4, 6, 2, 1, 3, 1, 3
+- [x] **Open Project** is still present in the header; the picker was not removed
+- [x] The window measures 1440×900 logical (2160×1350 physical at this display's 150% scale)
+
 Robustness — all three files
 
 - [x] `examples/music-brain-project.json` — 36 nodes, every registered kind exercised at least once
@@ -589,9 +646,12 @@ Robustness — all three files
 
 Scale
 
-- [x] The real 548-node file adapts in a single pass with no perceptible delay. Depth 4 and
-      top-level-only default expansion mean **13 rows** are mounted on open. Comfortably below the
-      ~2,000-visible-row threshold at which virtualization would be worth adding, so it is not.
+- [x] The real 548-node file adapts in a single pass with no perceptible delay. Measured through
+      `flattenTree`: **13 rows** mounted on open (fully collapsed), 60 under the previous
+      top-level-expanded default, 548 fully expanded. Comfortably below the ~2,000-visible-row
+      threshold at which virtualization would be worth adding, so it is not added.
+- [x] The startup row count is now independent of file size — it is the number of top-level nodes,
+      whatever sits beneath them
 
 Discipline
 
@@ -610,7 +670,6 @@ Left for review — requires driving the UI by hand
 These are the items that need a person at the keyboard. The file picker is a native dialog, and this
 machine could not be automated safely while in use, so they were **not** verified:
 
-- [ ] No JSON punctuation on screen — no braces, brackets, quoted values or `key:` prefixes
 - [ ] Domains, areas, projects and tasks are distinguishable without reading the labels
 - [ ] Clicking anywhere on a container row expands/collapses it
 - [ ] Collapsed non-empty containers show a child count; expanded ones do not

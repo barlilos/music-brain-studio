@@ -67,9 +67,13 @@ The renderer reaches the main process only through the API the preload script pu
 `window`. Channel names live in `src/shared/constants.ts` and payload types in
 `src/shared/types`, so both ends are checked against one definition.
 
-| Channel        | Renderer call              | Does                                            |
-| -------------- | -------------------------- | ----------------------------------------------- |
-| `project:open` | `window.projectApi.open()` | Prompts for a file, reads it, parses it as JSON |
+| Channel               | Renderer call                     | Does                                            |
+| --------------------- | --------------------------------- | ----------------------------------------------- |
+| `project:loadDefault` | `window.projectApi.loadDefault()` | Reads the startup project, no dialog            |
+| `project:open`        | `window.projectApi.open()`        | Prompts for a file, reads it, parses it as JSON |
+
+Neither channel takes a path. The only two files reachable are the one the user picks in the
+dialog and the fixed default, so the renderer cannot name a file for `readFile` to open.
 
 Every outcome — including a dismissed picker, unreadable file, or invalid JSON — comes back as a
 value in a discriminated union rather than a thrown error, because a rejected `invoke` reaches the
@@ -127,8 +131,9 @@ terminal, or unset the variable.
 ## Deliberately not included yet
 
 No router, state management, persistence layer, test runner, or CSP. Application state is
-two `useState` calls in `src/renderer/src/App.tsx`, which is enough for one open project
-and no editing.
+three `useState` calls in `src/renderer/src/App.tsx` — the open project, an error, and
+whether the startup load is still running — plus expansion and selection owned by the tree.
+That is enough for one open project and no editing.
 
 The project document is still arbitrary JSON rather than a typed model. `ProjectDocument`
 in `src/shared/types` is the single alias that changes when it becomes one — see
@@ -137,9 +142,12 @@ is written so that swap does not reach it.
 
 ## Project files for development
 
-`data/music-brain.json` is the real knowledge base and the **default fixture** — open it
-first when working on anything that reads a project. Two smaller fixtures in `examples/`
-cover cases the real file does not.
+`data/music-brain.json` is the real knowledge base and **the project the app opens with** —
+it loads automatically at launch, with no file picker. **Open Project** is still in the
+header for anything else, and is the way back if the default is missing or malformed.
+Project switching returns as a real feature in a later milestone.
+
+Two smaller fixtures in `examples/` cover cases the real file does not.
 
 | File                                | What it is for                                                      |
 | ----------------------------------- | ------------------------------------------------------------------- |
