@@ -22,12 +22,15 @@ interface ExplorerTreeProps {
 }
 
 export function ExplorerTree({ roots }: ExplorerTreeProps): JSX.Element {
-  // Top level open, everything else closed: enough to show the shape of the
-  // whole world without opening a project onto a wall of text. It also keeps the
-  // initial row count small, which is what makes deferring virtualization honest.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
-    () => new Set(roots.map((node) => node.id))
-  )
+  // Nothing expanded, which shows the root's own children and no deeper. The
+  // root is the header rather than a row, so this is the state where it alone is
+  // open — the whole world named at the top level, and nothing below it yet.
+  //
+  // This scales where expanding the top level did not: the initial row count is
+  // now the number of top-level nodes rather than that plus all their children,
+  // and it stays constant however large the file beneath grows. It is also what
+  // keeps deferring virtualization honest — 13 rows on the real 548-node file.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const rows = useMemo(() => flattenTree(roots, expanded), [roots, expanded])
