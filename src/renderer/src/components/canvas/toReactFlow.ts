@@ -27,6 +27,25 @@ export interface CanvasFlowGraph {
   edges: Edge[]
 }
 
+/**
+ * What the canvas occupies in graph space: every card's identity and position,
+ * in order.
+ *
+ * This is what framing is keyed on. A canvas root is not a promise about what is
+ * underneath it — the same root can hold a different set of cards after the file
+ * changes on disk, and will after editing exists — so treating "same root, same
+ * pane" as "already framed" skips a `fitView` that the new bounds needed.
+ *
+ * It deliberately carries positions and not content: a renamed card, or a
+ * different card wearing the focus ring, changes neither the bounds nor the
+ * framing, and moving between sibling leaves must leave the viewport exactly
+ * where it is. Positions come from the layout, which is deterministic, so this
+ * is stable without consulting the DOM.
+ */
+export function geometrySignatureOf(nodes: readonly CanvasFlowNode[]): string {
+  return nodes.map((node) => `${node.id}@${node.position.x},${node.position.y}`).join('|')
+}
+
 export function toReactFlow(viewModel: CanvasViewModel): CanvasFlowGraph {
   const nodes = viewModel.cards.map((card): CanvasFlowNode => ({
     id: card.id,

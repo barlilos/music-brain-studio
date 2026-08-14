@@ -30,7 +30,11 @@ import { buildCanvasGraph, canvasKey, canvasRootFor } from '@shared/model/canvas
 import type { NodeIndex } from '@shared/model/nodeIndex'
 import { layoutCanvas } from '@renderer/components/canvas/canvasLayout'
 import { toCanvasViewModel } from '@renderer/components/canvas/canvasViewModel'
-import { CANVAS_CARD_NODE_TYPE, toReactFlow } from '@renderer/components/canvas/toReactFlow'
+import {
+  CANVAS_CARD_NODE_TYPE,
+  geometrySignatureOf,
+  toReactFlow
+} from '@renderer/components/canvas/toReactFlow'
 import { CanvasCard } from '@renderer/components/canvas/CanvasCard'
 import { CanvasInteractionContext } from '@renderer/components/canvas/canvasInteraction'
 import '@renderer/components/canvas/canvas.css'
@@ -146,23 +150,42 @@ function CanvasFlow({ index, projectName, selectedId, onSelect }: CanvasViewProp
   const isMeasured = measurementSignature.length > 0 && !measurementSignature.includes(':0x0')
   const isFramable = isMeasured && storedIds === renderedIds
 
-  // Reframe whenever the canvas itself changes — not when the ring moves. Every
-  // selection under one parent resolves to one root, so moving between siblings
-  // leaves the viewport completely still, which is the whole point of the
-  // rooting rule.
-  const framedState = useRef<string | null>(null)
+  /*
+   * Reframe whenever anything the framing depends on changes — and nothing else.
+   *
+   * Three things decide a frame: which canvas, how big the pane is, and where
+   * the cards actually are. Keying on the first two alone was wrong: the same
+   * root can hold a different graph, so "same root, same pane" would report a
+   * canvas as already framed and skip the `fitView` its new bounds needed. That
+   * is reachable today by reopening a project whose file changed on disk, and it
+   * becomes routine the moment adding or removing a node exists.
+   *
+   * The geometry signature is what makes the sibling case work rather than
+   * something it has to be excused from: moving the ring between sibling leaves
+   * produces identical ids at identical positions, so the signature is unchanged
+   * and the viewport is left exactly alone. It comes from the layout, which is
+   * deterministic, so no DOM measurement is involved.
+   */
+  const geometrySignature = geometrySignatureOf(nodes)
+  const framedFor = useRef<{ key: string; pane: string; geometry: string } | null>(null)
   useEffect(() => {
-    const state = `${key}@${paneSize}`
-    if (!isFramable || framedState.current === state) return
+    const previous = framedFor.current
+    const alreadyFramed =
+      previous !== null &&
+      previous.key === key &&
+      previous.pane === paneSize &&
+      previous.geometry === geometrySignature
+    if (!isFramable || alreadyFramed) return
 
     // Easing is for arriving at a new canvas. The first framing has nothing to
-    // ease from, and a resize should track the pointer rather than lag 180ms
-    // behind it, so both of those are instant.
-    const isNewCanvas = framedState.current !== null && !framedState.current.startsWith(`${key}@`)
+    // ease from; a resize should track the pointer rather than lag behind it;
+    // and a graph that changed under a root the user is already looking at is
+    // the same canvas, not a new one. Only the first of those eases.
+    const isNewCanvas = previous !== null && previous.key !== key
 
     void fitView(isNewCanvas ? animated(fitOptions) : fitOptions)
-    framedState.current = state
-  }, [key, fitOptions, paneSize, isFramable, measurementSignature, fitView])
+    framedFor.current = { key, pane: paneSize, geometry: geometrySignature }
+  }, [key, fitOptions, paneSize, geometrySignature, isFramable, measurementSignature, fitView])
 
   return (
     <CanvasInteractionContext value={interaction}>
