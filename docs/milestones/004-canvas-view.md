@@ -939,6 +939,19 @@ will want it when search indexing arrives.
 This is also where the "IDs are opaque" contract earns its keep. `parentIdOf` is derived by walking
 the tree, not by truncating a JSON Pointer — so it keeps working when identity stops being positional.
 
+**What a refit is keyed on.** Framing compares the canvas root, the pane size and a signature of the
+rendered geometry — every card's id and graph-space position. Keying it on root and pane size alone
+was wrong in a way that would not have surfaced until later: a root is not a promise about what is
+underneath it, so the same root holding a different graph reported itself as already framed and
+skipped the `fitView` its new bounds needed. That is reachable today by reopening a project whose
+file changed on disk, and becomes routine once adding or removing a node exists.
+
+The signature carries positions rather than content, which is what makes the sibling case fall out
+rather than need excusing: moving the ring between sibling leaves produces identical ids at identical
+positions, so nothing reframes and the viewport is left exactly alone. A renamed card likewise moves
+no bounds and triggers nothing. Because the layout is deterministic, the signature is stable without
+consulting the DOM.
+
 ### Layout is pure, and deterministic
 
 ```ts
@@ -1340,6 +1353,9 @@ Animation
 - [x] The promoted card visibly travels from its column position to the root position
 - [x] Entering cards fade and scale in; departing cards disappear immediately
 - [x] `fitView` eases over ~180ms rather than jumping
+- [x] Framing is keyed on the canvas root, the pane size **and** the rendered geometry: a child
+      added, removed or reordered reframes, while focusing a different sibling or renaming a
+      card does not
 - [x] No transition exceeds 200ms, and none overshoots
 - [x] Clicking twice within 100ms registers both clicks; no transition swallows input
 - [x] `prefers-reduced-motion: reduce` removes all motion — verified by toggling the OS setting, not
