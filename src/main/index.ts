@@ -26,7 +26,22 @@ function createMainWindow(): void {
       // undoes the isolation the preload bridge exists to provide.
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      /*
+       * Chromium suspends the rendering lifecycle for a window it considers
+       * occluded or backgrounded, and `ResizeObserver` callbacks are delivered
+       * as part of that lifecycle. The canvas measures its cards through one, so
+       * a window that is behind another when a canvas is rebuilt can end up with
+       * cards that are laid out and painted but never measured — which leaves
+       * React Flow with no handle bounds and therefore no edges, and no bounds
+       * for `fitView`, so the viewport freezes. It does not recover, because
+       * nothing will ever deliver the observation that was skipped.
+       *
+       * This is a knowledge base its owner leaves open beside a DAW and a
+       * browser, so "the window was not on top for a moment" is the normal case
+       * rather than an edge case.
+       */
+      backgroundThrottling: false
     }
   })
 
