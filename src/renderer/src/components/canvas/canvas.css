@@ -1,0 +1,61 @@
+/*
+ * Every duration in the canvas, in one place.
+ *
+ * The philosophy is that immediate should not mean abrupt. All the data is
+ * already in memory, so nothing can legitimately take time — which makes every
+ * millisecond on screen a deliberate choice. These transitions exist to keep the
+ * eye on the thing it was looking at, not to decorate a wait.
+ *
+ * Everything animated here is `transform` or `opacity`: compositor properties
+ * that never trigger layout, so a redraw can never block input.
+ */
+
+/*
+ * A card that survives a redraw keeps its DOM element, because React Flow keys
+ * nodes by id and card ids are node ids. So promoting a child to root *moves*
+ * its card from the column to the root position rather than replacing it, and
+ * the eye is carried from where the user clicked to where the new canvas is
+ * anchored. This one rule is worth more than any entrance animation.
+ */
+.react-flow__node {
+  transition: transform 160ms ease-out;
+}
+
+/*
+ * Entrances are subtle; exits are instant. Animating a card out means tracking
+ * presence after the data says it is gone — real complexity for a frame nobody
+ * is looking at. The asymmetry is deliberate.
+ */
+.mbs-canvas-card {
+  animation: mbs-card-enter 140ms ease-out;
+  transition:
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+@keyframes mbs-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Edges redraw instantly. An edge is a relationship, not an object, and a curve
+   crawling to a new shape draws the eye to the least meaningful thing on screen. */
+
+/*
+ * Not an enhancement and not a later pass. These transitions are continuity
+ * aids, and for someone who has asked for less motion the instant result *is*
+ * the continuity.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node,
+  .mbs-canvas-card {
+    animation: none;
+    transition: none;
+  }
+}

@@ -1,10 +1,20 @@
 /**
  * One line in the explorer.
  *
- * Purely presentational: it receives a row model and two callbacks, and touches
- * neither the document, the adapter, nor the expansion set. Later features
- * extend the *row model* — a match range for search highlighting, a drag handle,
- * a context-menu target — rather than reaching into the tree's internals.
+ * **Two hit targets, two meanings.** The chevron expands and collapses the
+ * hierarchy; the rest of the row selects the node and opens its canvas. They are
+ * separate `<button>`s, not one button that does both.
+ *
+ * That separation is the point rather than a detail. The explorer is a
+ * navigator, and browsing a large hierarchy means opening a lot of things to see
+ * what is in them — if every disclosure also re-rooted the workspace, the user
+ * could not look around without losing the thing they were looking at. Expansion
+ * is explorer-only state; selection is shared with the canvas.
+ *
+ * Purely presentational otherwise: it receives a row model and two callbacks, and
+ * touches neither the document, the adapter, nor the expansion set. Later
+ * features extend the *row model* — a match range for search highlighting, a drag
+ * handle, a context-menu target — rather than reaching into the tree's internals.
  *
  * It also contains no knowledge of any specific node kind. Appearance comes from
  * a single `presentationFor` lookup, so a new kind never touches this file.
@@ -40,25 +50,23 @@ export function ExplorerRow({
   // the file's structure leaking back into a UI built to hide it.
   const label = node.label ?? `Untitled ${kind.name.toLowerCase()}`
 
-  function handleClick(): void {
-    onSelect(node.id)
-    if (hasChildren) onToggle(node.id)
-  }
-
   return (
-    <button
-      type="button"
+    <div
       role="treeitem"
       aria-level={depth + 1}
       aria-expanded={hasChildren ? isExpanded : undefined}
       aria-selected={isSelected}
       data-node-id={node.id}
-      onClick={handleClick}
-      title={label}
-      className={`flex h-7 w-full items-center gap-1.5 pr-3 text-left text-sm select-none ${
-        isSelected
-          ? 'bg-neutral-200/70 dark:bg-neutral-700/60'
-          : 'hover:bg-neutral-100 dark:hover:bg-neutral-800/70'
+      /*
+       * `pl-2` on the row itself, not on the indent guides — so it is a margin
+       * for the whole tree rather than an extra level of indentation. Every row
+       * shifts by the same 8px, depth stays entirely a function of the guides,
+       * and children cannot end up double-indented. The selection background
+       * still spans the full width, because it is on this element rather than on
+       * the padded content.
+       */
+      className={`flex h-7 w-full items-center gap-1.5 pl-2 text-sm select-none ${
+        isSelected ? 'bg-neutral-200/70 dark:bg-neutral-700/60' : ''
       }`}
     >
       {/*
@@ -76,42 +84,66 @@ export function ExplorerRow({
       ))}
 
       {/*
-        Reserved on leaves too, so labels align into a single scannable column
-        instead of stepping in and out with the presence of children.
+        The disclosure control. Its own button so that expanding never touches
+        selection, and its own hover so the two targets are visibly different
+        rather than merely behaving differently.
+
+        Out of the tab order on purpose: the row's label is the one tab stop, and
+        a second stop per row would double the length of the tree for keyboard
+        users while real tree keyboard navigation (arrow keys) does not exist yet.
+        The column is reserved on leaves too, so labels align down one column.
       */}
-      <span className="flex w-4 shrink-0 justify-center text-neutral-400 dark:text-neutral-500">
-        {hasChildren && (
+      {hasChildren ? (
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => onToggle(node.id)}
+          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${label}`}
+          className="flex h-full w-4 shrink-0 items-center justify-center rounded-sm text-neutral-400 hover:bg-neutral-300/70 dark:text-neutral-500 dark:hover:bg-neutral-600/60"
+        >
           <ChevronIcon className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-        )}
-      </span>
+        </button>
+      ) : (
+        <span aria-hidden="true" className="h-full w-4 shrink-0" />
+      )}
 
-      <span className={`shrink-0 ${kind.iconClassName}`}>
-        <kind.Icon isComplete={node.isComplete} />
-      </span>
-
-      <span
-        className={`truncate ${kind.labelClassName} ${
-          isComplete ? 'text-neutral-400 line-through dark:text-neutral-600' : ''
+      {/* Selecting is the row's other job, and the only one that reaches the canvas. */}
+      <button
+        type="button"
+        onClick={() => onSelect(node.id)}
+        title={label}
+        className={`flex h-full min-w-0 flex-1 items-center gap-1.5 pr-3 text-left ${
+          isSelected ? '' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800/70'
         }`}
       >
-        {label}
-      </span>
-
-      {node.tags.length > 0 && (
-        <span className="shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-600">
-          {node.tags.join(' · ')}
+        <span className={`shrink-0 ${kind.iconClassName}`}>
+          <kind.Icon isComplete={node.isComplete} />
         </span>
-      )}
 
-      {/*
-        Pushed right, and only while collapsed: it answers "is there anything in
-        here" before you spend a click, and once expanded the answer is on screen.
-      */}
-      {hasChildren && !isExpanded && (
-        <span className="ml-auto shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-600">
-          {node.children.length}
+        <span
+          className={`truncate ${kind.labelClassName} ${
+            isComplete ? 'text-neutral-400 line-through dark:text-neutral-600' : ''
+          }`}
+        >
+          {label}
         </span>
-      )}
-    </button>
+
+        {node.tags.length > 0 && (
+          <span className="shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-600">
+            {node.tags.join(' · ')}
+          </span>
+        )}
+
+        {/*
+          Pushed right, and only while collapsed: it answers "is there anything in
+          here" before you spend a click, and once expanded the answer is on screen.
+        */}
+        {hasChildren && !isExpanded && (
+          <span className="ml-auto shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-600">
+            {node.children.length}
+          </span>
+        )}
+      </button>
+    </div>
   )
 }

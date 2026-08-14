@@ -3,9 +3,10 @@
 Desktop application for managing a hierarchical JSON knowledge base for music projects,
 research, tasks and creative workflows.
 
-> **Status: early.** The app can open a project file and browse it as a hierarchy of Music
-> Brain concepts — domains, areas, projects and tasks — rather than as raw JSON. There is no
-> editing, saving, search or state management yet.
+> **Status: early.** The app opens into a two-pane workspace: an Explorer tree for finding
+> things, and a Canvas that shows the selected node and its immediate children as a graph.
+> **The Canvas is the primary workspace; the Explorer is a navigation aid.** There is no
+> editing, saving or search yet — the Canvas is read-only.
 
 ## Requirements
 
@@ -111,6 +112,7 @@ branch — not retrofitted afterwards. Each document is named `<NNN>-<feature-sl
 | 001 — foundation                                                                  | Electron + React shell (this README) |
 | [002 — open and display project](docs/milestones/002-open-and-display-project.md) | The first IPC surface, and the tree  |
 | [003 — Music Brain Explorer UI](docs/milestones/003-music-brain-explorer-ui.md)   | The explorer: typed nodes, not JSON  |
+| [004 — Canvas View](docs/milestones/004-canvas-view.md)                           | The canvas: the workspace beside it  |
 
 ## Notes
 
@@ -130,10 +132,15 @@ terminal, or unset the variable.
 
 ## Deliberately not included yet
 
-No router, state management, persistence layer, test runner, or CSP. Application state is
-three `useState` calls in `src/renderer/src/App.tsx` — the open project, an error, and
-whether the startup load is still running — plus expansion and selection owned by the tree.
-That is enough for one open project and no editing.
+No router, application state management, persistence layer, test runner, or CSP. Application
+state is four `useState` calls in `src/renderer/src/App.tsx` — the open project, an error,
+whether the startup load is still running, and the selected node — plus expansion owned by
+the tree. Selection lives in `App` because both panes read it and both may set it.
+
+`@xyflow/react` is the one runtime dependency beyond React, and it renders the Canvas. It
+brings `zustand` with it as an internal store for its own viewport and node state; that is
+the library's business, not the application's, and it is the only sense in which the
+paragraph above is qualified.
 
 The project document is still arbitrary JSON rather than a typed model. `ProjectDocument`
 in `src/shared/types` is the single alias that changes when it becomes one — see

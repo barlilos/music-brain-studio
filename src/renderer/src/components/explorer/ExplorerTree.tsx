@@ -1,40 +1,51 @@
 /**
- * The explorer tree: the navigable view of a project.
+ * The explorer tree: the navigation aid beside the canvas.
  *
- * Owns the two pieces of state the tree needs and nothing else owns — which
- * nodes are expanded, and which is selected — and renders the flat list that
- * `flattenTree` derives from them.
+ * The canvas is the primary workspace; this is where you *find* something. That
+ * is why selection no longer lives here — two views need it, so it is owned by
+ * the application and arrives as a prop. Expansion stays, because it is
+ * genuinely tree-local: nothing outside this component renders from it.
  *
  * Expansion is a `Set` of node IDs rather than a flag on each node's own
  * component, as in milestone 002. That gives O(1) lookups, keeps the state
- * somewhere a future "expand all" or "reveal this node" can reach, and — since
- * an ID is a plain string — makes it serializable, so persisting expansion per
- * project later is storage work rather than redesign.
+ * somewhere "reveal this node" can reach — which is now a real feature rather
+ * than a future one — and, since an ID is a plain string, makes it serializable.
  *
  * The IDs are opaque here. Nothing in this file, or below it, parses one or
  * assumes anything about how it was produced.
  */
 
-import { useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { ExplorerNode } from '@shared/model/node'
+import { ancestorIdsOf, type NodeIndex } from '@shared/model/nodeIndex'
 import { flattenTree } from '@renderer/components/explorer/flattenTree'
 import { ExplorerRow } from '@renderer/components/explorer/ExplorerRow'
+import '@renderer/components/explorer/explorer.css'
 
 interface ExplorerTreeProps {
   roots: readonly ExplorerNode[]
+  index: NodeIndex
+  selectedId: string | null
+  onSelect: (nodeId: string) => void
 }
 
-export function ExplorerTree({ roots }: ExplorerTreeProps): JSX.Element {
-  // Nothing expanded, which shows the root's own children and no deeper. The
-  // root is the header rather than a row, so this is the state where it alone is
-  // open — the whole world named at the top level, and nothing below it yet.
+export function ExplorerTree({
+  roots,
+  index,
+  selectedId,
+  onSelect
+}: ExplorerTreeProps): JSX.Element {
+  // Nothing expanded, which shows the top level and no deeper. The project is
+  // the header rather than a row, so this is the state where it alone is open.
   //
   // This scales where expanding the top level did not: the initial row count is
-  // now the number of top-level nodes rather than that plus all their children,
-  // and it stays constant however large the file beneath grows. It is also what
-  // keeps deferring virtualization honest — 13 rows on the real 548-node file.
+  // the number of top-level nodes, and it stays constant however large the file
+  // beneath grows.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  // The tree owns its own scrolling, so reveal has one container to move and
+  // never has to reach out into the layout around it.
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const rows = useMemo(() => flattenTree(roots, expanded), [roots, expanded])
 
@@ -46,6 +57,73 @@ export function ExplorerTree({ roots }: ExplorerTreeProps): JSX.Element {
     })
   }
 
+  // Reveal — the pattern VS Code calls `explorer.autoReveal`. Selection can now
+  // change from the canvas, and a highlight on a row hidden inside a collapsed
+  // ancestor is no highlight at all.
+  //
+  // Returning `current` unchanged when every ancestor is already open matters:
+  // it makes this a no-op for selections made in the tree itself, which is most
+  // of them, rather than a state write on every click.
+  useEffect(() => {
+    if (selectedId === null) return
+
+    setExpanded((current) => {
+      const ancestors = ancestorIdsOf(index, selectedId)
+      if (ancestors.every((id) => current.has(id))) return current
+
+      const next = new Set(current)
+      for (const id of ancestors) next.add(id)
+      return next
+    })
+  }, [selectedId, index])
+
+  /*
+   * Then bring it into view — but only if it is not already in view, and
+   * without `scrollIntoView`.
+   *
+   * `scrollIntoView` would do the job in one line. It is avoided because it does
+   * more than asked: it walks every scrollable ancestor and forces a synchronous
+   * layout, for a movement that is usually zero. Computing whether the row is
+   * outside the visible band and, when it is, moving this one container's
+   * `scrollTop` touches nothing else and does nothing at all in the common case
+   * where the selected row is already on screen.
+   *
+   * The frame of delay is for the canvas, which is rebuilding in the same tick:
+   * there is no reason for the explorer to force layout while it does.
+   *
+   * Historical note, because an earlier revision of the milestone document said
+   * otherwise: this was once believed to be the cause of a bug that left the
+   * canvas with no edges and a frozen viewport. It was not. That turned out to
+   * be Chromium suspending the rendering lifecycle for an occluded window, and
+   * it is fixed in the main process with `backgroundThrottling: false`. This
+   * code is kept because it is better on its own merits, not as a fix.
+   */
+  useEffect(() => {
+    if (selectedId === null) return
+
+    const frame = requestAnimationFrame(() => {
+      const scroller = scrollRef.current
+      const row = Array.from(containerRef.current?.querySelectorAll('[data-node-id]') ?? []).find(
+        // Matched in JavaScript rather than interpolated into a selector, so this
+        // never has to know what characters an opaque ID might contain.
+        (element) => element instanceof HTMLElement && element.dataset.nodeId === selectedId
+      )
+      if (scroller === null || !(row instanceof HTMLElement)) return
+
+      const top = row.offsetTop
+      const bottom = top + row.offsetHeight
+
+      // `block: 'nearest'` by hand: move as little as possible, and only when the
+      // row is actually outside the visible band.
+      if (top < scroller.scrollTop) scroller.scrollTop = top
+      else if (bottom > scroller.scrollTop + scroller.clientHeight) {
+        scroller.scrollTop = bottom - scroller.clientHeight
+      }
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [selectedId, rows])
+
   if (rows.length === 0) {
     return (
       <p className="px-3 py-2 text-sm text-neutral-500 dark:text-neutral-400">
@@ -55,16 +133,18 @@ export function ExplorerTree({ roots }: ExplorerTreeProps): JSX.Element {
   }
 
   return (
-    <div role="tree" aria-label="Project contents" className="py-1">
-      {rows.map((row) => (
-        <ExplorerRow
-          key={row.node.id}
-          row={row}
-          isSelected={row.node.id === selectedId}
-          onSelect={setSelectedId}
-          onToggle={toggle}
-        />
-      ))}
+    <div ref={scrollRef} className="mbs-explorer-scroll h-full overflow-auto">
+      <div ref={containerRef} role="tree" aria-label="Project contents" className="py-1">
+        {rows.map((row) => (
+          <ExplorerRow
+            key={row.node.id}
+            row={row}
+            isSelected={row.node.id === selectedId}
+            onSelect={onSelect}
+            onToggle={toggle}
+          />
+        ))}
+      </div>
     </div>
   )
 }
