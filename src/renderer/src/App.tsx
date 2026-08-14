@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import type { LoadProjectResult, Project } from '@shared/types'
 import { toExplorerProject } from '@shared/model/adapter'
+import { indexNodes } from '@shared/model/nodeIndex'
 import { ExplorerTree } from '@renderer/components/explorer/ExplorerTree'
 import { EmptyState } from '@renderer/components/explorer/EmptyState'
+import { CanvasView } from '@renderer/components/canvas/CanvasView'
+import { CanvasLocation } from '@renderer/components/canvas/CanvasLocation'
 
 /**
- * The whole application: open into a project, then browse it.
+ * The whole application: open into a project, find things in the explorer, work
+ * on them in the canvas.
+ *
+ * The canvas is the primary workspace and the explorer is a navigation aid,
+ * which is why the split is 25 / 75 and why selection is owned here rather than
+ * by the tree — two views read it, and both may set it.
  *
  * `project.document` is still opaque here — stored, handed to the adapter, never
  * indexed or type-tested. Milestone 002 kept that discipline by letting only
- * `TreeView` look inside; the rule is unchanged, but the one module allowed to
- * look is now `@shared/model/adapter`, which is a pure function rather than a
- * component.
+ * `TreeView` look inside; the rule is unchanged, and the one module allowed to
+ * look is `@shared/model/adapter`, a pure function rather than a component.
  */
 export function App(): JSX.Element {
   const [project, setProject] = useState<Project | null>(null)
@@ -19,12 +26,19 @@ export function App(): JSX.Element {
   // Starts true because the first load begins before the first paint. Without
   // it the empty state would flash for one frame on every launch.
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // One pass over the file, at open time rather than on every render.
   const explorer = useMemo(
     () => (project === null ? null : toExplorerProject(project.document)),
     [project]
   )
+
+  // The only whole-project pass in the canvas pipeline, and the reason every
+  // other stage is O(fan-out): it buys O(1) lookups for identity and parentage.
+  // Memoized on the adapted roots, so it runs once per project rather than once
+  // per selection.
+  const index = useMemo(() => (explorer === null ? null : indexNodes(explorer.roots)), [explorer])
 
   /**
    * Applies any outcome that involved actually reading a file.
@@ -35,6 +49,10 @@ export function App(): JSX.Element {
    * of silencing the dependency rule.
    */
   const applyResult = useCallback((result: LoadProjectResult): void => {
+    // A node ID addresses a position in one document. Carrying a selection into
+    // a different project would point it at something unrelated.
+    setSelectedId(null)
+
     switch (result.status) {
       case 'opened':
         setProject(result.project)
@@ -88,9 +106,16 @@ export function App(): JSX.Element {
                 The project is named by its contents. The filename is where it
                 happens to be stored, so it is demoted rather than titled — a
                 project is a thing the user made, not a path.
+
+                The name is also the way back to the project-level canvas, which
+                is otherwise reachable only at startup.
               */}
-              <h1 className="truncate text-sm font-semibold tracking-tight">
-                {explorer.name ?? project.fileName}
+              <h1 className="min-w-0">
+                <CanvasLocation
+                  projectName={explorer.name ?? project.fileName}
+                  isAtRoot={selectedId === null}
+                  onGoToRoot={() => setSelectedId(null)}
+                />
               </h1>
               <span className="truncate text-xs text-neutral-400 dark:text-neutral-500">
                 {project.fileName}
@@ -117,16 +142,39 @@ export function App(): JSX.Element {
         </p>
       )}
 
-      <main className="min-h-0 flex-1 overflow-auto">
-        {explorer ? (
-          // Keyed by path so opening a different project mounts a fresh tree.
-          // Without this, expansion and selection would carry over to a document
-          // where the same node IDs mean something else.
-          <ExplorerTree key={project?.filePath} roots={explorer.roots} />
-        ) : (
+      {explorer && index ? (
+        // The split only appears once there is a project. Splitting the window
+        // before there is anything to put in either half would advertise two
+        // empty things instead of one.
+        //
+        // Keyed by path so opening a different project mounts a fresh tree and a
+        // fresh canvas. Without it, expansion would carry over to a document
+        // where the same node IDs mean something else.
+        <main key={project?.filePath} className="flex min-h-0 flex-1">
+          {/* The tree owns its own scrolling — see the reveal effect for why. */}
+          <div className="w-1/4 max-w-105 min-w-65 shrink-0 border-r border-neutral-200 dark:border-neutral-800">
+            <ExplorerTree
+              roots={explorer.roots}
+              index={index}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
+          </div>
+
+          <div className="min-w-0 flex-1 bg-neutral-50 dark:bg-neutral-900">
+            <CanvasView
+              index={index}
+              projectName={explorer.name}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
+          </div>
+        </main>
+      ) : (
+        <main className="min-h-0 flex-1 overflow-auto">
           <EmptyState isLoading={isLoading} onOpenProject={() => void openProject()} />
-        )}
-      </main>
+        </main>
+      )}
     </div>
   )
 }
