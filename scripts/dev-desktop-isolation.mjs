@@ -32,20 +32,20 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import {
+  DLL_PATH,
+  SetupError,
+  WATCHER_INSTALLED,
+  ensureToolkit,
+  findAutoHotkey,
+  watcherInSync
+} from './windows/setup-toolkit.mjs'
 
-/** Where the watcher and its DLL live. Overridable for a non-default install. */
-const TOOLKIT_DIR = process.env.MUSIC_BRAIN_DEV_DESKTOP_HOME ?? 'C:\\Tools\\music-brain-dev-desktop'
-const WATCHER_SCRIPT = join(TOOLKIT_DIR, 'music-brain-dev.ahk')
+/** The installed copy the watcher actually runs from; the source lives in git. */
+const WATCHER_SCRIPT = WATCHER_INSTALLED
 
 /** Diagnostic escape hatch: force a desktop index and skip discovery entirely. */
 const TARGET_OVERRIDE = process.env.MUSIC_BRAIN_DEV_DESKTOP_TARGET ?? ''
-
-const AHK_CANDIDATES = [
-  process.env.AUTOHOTKEY_EXE,
-  'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey64.exe',
-  'C:\\Program Files\\AutoHotkey\\AutoHotkey64.exe',
-  join(process.env.LOCALAPPDATA ?? '', 'Programs\\AutoHotkey\\v2\\AutoHotkey64.exe')
-].filter(Boolean)
 
 const STATE_DIR = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, 'music-brain-dev-desktop')
@@ -130,23 +130,17 @@ function watcherState() {
   return { running: true, status }
 }
 
-function findAutoHotkey() {
-  return AHK_CANDIDATES.find((candidate) => existsSync(candidate))
-}
-
 function startWatcher() {
   const ahk = findAutoHotkey()
   if (!ahk) {
     fail('AutoHotkey v2 (64-bit) was not found.', [
-      ...AHK_CANDIDATES.map((c) => `looked for: ${c}`),
       'Install AutoHotkey v2 from https://www.autohotkey.com/',
       'or set AUTOHOTKEY_EXE to the full path of AutoHotkey64.exe'
     ])
   }
   if (!existsSync(WATCHER_SCRIPT)) {
     fail(`The watcher script is missing: ${WATCHER_SCRIPT}`, [
-      'See C:\\Tools\\music-brain-dev-desktop\\README.md for the expected layout',
-      'or set MUSIC_BRAIN_DEV_DESKTOP_HOME to where the toolkit actually lives'
+      'run `pnpm dev:isolation:setup` to install it from the repository'
     ])
   }
 
@@ -285,7 +279,35 @@ const REASON_TEXT = {
 
 // -------------------------------------------------------------------- preflight
 
+/**
+ * Brings the local toolkit up to scratch before launching.
+ *
+ * Cheap when everything is already in place: comparing two files and one
+ * existence check, no network and no AutoHotkey probe. The DLL is not verified
+ * here — the watcher makes a real VirtualDesktopAccessor call at startup and
+ * reports the result, so a broken DLL is caught below and repaired then,
+ * without paying for a probe on every healthy launch.
+ */
+async function bootstrapToolkit() {
+  const needsSetup = !watcherInSync() || !existsSync(DLL_PATH)
+  if (!needsSetup) return
+
+  log('Local routing toolkit is missing or out of date — setting it up.')
+  await runSetup()
+}
+
+async function runSetup() {
+  try {
+    await ensureToolkit()
+  } catch (error) {
+    if (error instanceof SetupError) fail(error.message, error.hints ?? [])
+    throw error
+  }
+}
+
 async function prepareIsolation() {
+  await bootstrapToolkit()
+
   if (!watcherState().running) {
     startWatcher()
     const state = await waitFor(() => true)
@@ -301,14 +323,28 @@ async function prepareIsolation() {
     log('Watcher already running.')
   }
 
-  const { status } = watcherState()
-  if (status.dll !== 'ok') {
-    fail(`VirtualDesktopAccessor is not usable: ${status.dll} — ${status.detail || 'no detail'}`, [
-      `expected at: ${join(TOOLKIT_DIR, 'VirtualDesktopAccessor.dll')}`,
-      'the DLL must be the 64-bit build matching THIS Windows version',
-      'Windows 10: use the "2019-windows10" release from github.com/Ciantic/VirtualDesktopAccessor',
-      'Windows 11 24H2+: use the "2024-12-16-windows11" release'
-    ])
+  // The watcher made a real VirtualDesktopAccessor call at startup. If that
+  // failed, the DLL is wrong for this Windows build — repair it and retry once
+  // rather than making the developer work out which release they need.
+  if (watcherState().status.dll !== 'ok') {
+    const before = watcherState().status
+    log(`VirtualDesktopAccessor reported "${before.dll}" — repairing the toolkit.`)
+    await runSetup()
+
+    startWatcher()
+    const restarted = await waitFor((s) => s.dll === 'ok')
+    if (!restarted?.running || restarted.status?.dll !== 'ok') {
+      const now = restarted?.status
+      fail(
+        `VirtualDesktopAccessor is still not usable: ${now?.dll ?? 'unknown'} — ${now?.detail || 'no detail'}`,
+        [
+          `expected at: ${DLL_PATH}`,
+          'run `pnpm dev:isolation:setup` to see the full diagnosis',
+          'see https://github.com/Ciantic/VirtualDesktopAccessor/releases'
+        ]
+      )
+    }
+    log('Toolkit repaired.')
   }
 
   const workspaceName = basename(process.cwd())

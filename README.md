@@ -29,10 +29,18 @@ Two launch paths, told apart by which command you type and nothing else:
 
 ```bash
 pnpm dev                   # yours. Always opens on your current desktop
-pnpm dev:isolated          # the agent's. Never opens on your current desktop
+pnpm dev:isolated          # the agent's. Never opens on your current desktop;
+                           #   bootstraps the local tooling when necessary
+pnpm dev:isolation:setup   # explicitly repair/reinstall the local tooling
 pnpm dev:isolation:off     # emergency manual off switch
-pnpm dev:isolation:status  # the watcher's view: DLL, desktops, chosen target
+pnpm dev:isolation:status  # diagnose: DLL, desktops, chosen target
 ```
+
+On a fresh machine the whole setup is `pnpm install && pnpm dev:isolated` — the first
+isolated launch installs the watcher and fetches a matching `VirtualDesktopAccessor.dll`
+before starting. The only thing you must install yourself is
+[AutoHotkey v2](https://www.autohotkey.com/); the tooling will not install software for
+you, and it never elevates.
 
 `pnpm dev` **disables routing before it launches**, so a flag left behind by an earlier
 isolated run can never divert your own launch. That guarantee is the reason `dev` does
@@ -58,24 +66,44 @@ Before launching, the command starts the watcher if needed, checks it can reach
 the whole feature exists to avoid. It switches routing back off when the dev server stops;
 `pnpm dev` does not depend on that having worked.
 
-The repository half is one script, [scripts/dev-desktop-isolation.mjs](scripts/dev-desktop-isolation.mjs),
-which never touches virtual desktops itself. It works out _what to look for_ — the folder
-name and the VS Code instance that owns the running process, found by walking the parent
-chain — and writes that as a request under `%LOCALAPPDATA%\music-brain-dev-desktop\`. The
-automation is an AutoHotkey v2 watcher living outside this repository in
-`C:\Tools\music-brain-dev-desktop\`, which owns every call into VirtualDesktopAccessor,
-resolves the target and publishes its decision back. That folder's `README.md` covers
-setup, window matching and troubleshooting.
+#### How the two halves fit together
+
+| Piece                                                                      | Lives in | Role                                                                             |
+| -------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| [scripts/dev-desktop-isolation.mjs](scripts/dev-desktop-isolation.mjs)     | git      | Launcher: works out _what to look for_, posts a request, launches Electron       |
+| [scripts/windows/music-brain-dev.ahk](scripts/windows/music-brain-dev.ahk) | git      | **Canonical watcher source** — window discovery, target selection, moving, focus |
+| [scripts/windows/setup-toolkit.mjs](scripts/windows/setup-toolkit.mjs)     | git      | Bootstrap: installs the watcher, picks and verifies the DLL                      |
+| `C:\Tools\music-brain-dev-desktop\music-brain-dev.ahk`                     | machine  | Installed copy, overwritten from git whenever the two differ                     |
+| `C:\Tools\music-brain-dev-desktop\VirtualDesktopAccessor.dll`              | machine  | Downloaded per Windows build. **Never committed**                                |
+| `%LOCALAPPDATA%\music-brain-dev-desktop\`                                  | machine  | Flag, request, status and log                                                    |
+
+Edit the watcher in `scripts/windows/`, never the installed copy — the next isolated
+launch overwrites it. The launcher never loads the DLL itself; it derives the folder name
+and the VS Code instance that owns the running process by walking the parent chain, writes
+that as a request, and the watcher answers with its decision. That keeps every
+VirtualDesktopAccessor call on one side of the boundary.
 
 The watcher matches the window it moves on `electron.exe` plus the exact title
 `Music Brain Studio`, so a packaged `Music Brain Studio.exe` structurally cannot match and
 production installs are never touched. Nothing in `src/` knows any of this exists, and no
 code path ever switches your active desktop.
 
-Requires AutoHotkey v2, a `VirtualDesktopAccessor.dll` matching your Windows version, and
-**at least two virtual desktops** — on Windows 10 the DLL cannot create one, and Windows
-forgets them on reboot, so `Win+Ctrl+D` once per session may be needed. A Startup-folder
-entry for the watcher is optional; `pnpm dev:isolated` starts it.
+#### Which DLL, and why it is not committed
+
+`VirtualDesktopAccessor.dll` wraps undocumented COM interfaces whose layout Microsoft
+changes between Windows builds, so a newer DLL is _actively wrong_ on an older build — and
+a mismatched one loads, resolves every export, then returns `-1` from every call. Setup
+therefore maps your Windows build to the release whose notes cover it, downloads that
+asset from the official
+[Ciantic/VirtualDesktopAccessor](https://github.com/Ciantic/VirtualDesktopAccessor)
+release metadata, and proves it works with a real call before accepting it. If your build
+is not covered by any release note, it stops and says so rather than guessing. An existing
+DLL that works is never replaced; one that does not is moved aside as
+`VirtualDesktopAccessor.incompatible-<timestamp>.dll` first.
+
+Requires **at least two virtual desktops** — on Windows 10 the DLL cannot create one, and
+Windows forgets them on reboot, so `Win+Ctrl+D` once per session may be needed. A
+Startup-folder entry for the watcher is optional; `pnpm dev:isolated` starts it.
 
 ## Building
 
@@ -94,6 +122,7 @@ platform — electron-builder does not cross-compile these targets.
 | ----------------------- | ------------------------------------------------- |
 | `dev`                   | Dev server + Electron, on your current desktop    |
 | `dev:isolated`          | Same, routed away from your active desktop        |
+| `dev:isolation:setup`   | Install/repair the local routing toolkit          |
 | `dev:isolation:*`       | `off` / `status` for that routing (Windows only)  |
 | `build`                 | Typecheck, then bundle main, preload and renderer |
 | `start`                 | Run the bundled output as a production app        |
