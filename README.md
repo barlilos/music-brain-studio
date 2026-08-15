@@ -78,7 +78,11 @@ the whole feature exists to avoid. It switches routing back off when the dev ser
 | `%LOCALAPPDATA%\music-brain-dev-desktop\`                                  | machine  | Flag, request, status and log                                                    |
 
 Edit the watcher in `scripts/windows/`, never the installed copy — the next isolated
-launch overwrites it. The launcher never loads the DLL itself; it derives the folder name
+launch overwrites it. A watcher already running keeps executing the script it read at
+startup, so whenever the installed copy is replaced the running instance is stopped too;
+`pnpm dev:isolated` then starts the new one. That means an explicit
+`pnpm dev:isolation:setup` can leave no watcher running, which is fine and expected — it
+is started again on the next isolated launch. The launcher never loads the DLL itself; it derives the folder name
 and the VS Code instance that owns the running process by walking the parent chain, writes
 that as a request, and the watcher answers with its decision. That keeps every
 VirtualDesktopAccessor call on one side of the boundary.

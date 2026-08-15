@@ -261,10 +261,15 @@ export function watcherInSync() {
   }
 }
 
-/** Stops a running watcher so the DLL it has loaded can be replaced. */
+/**
+ * Stops any running Music Brain watcher and reports which pids were stopped.
+ *
+ * Matched on the script path in the command line, so other AutoHotkey scripts
+ * on the machine are never touched.
+ */
 function stopWatcher() {
   try {
-    execFileSync(
+    const output = execFileSync(
       'powershell.exe',
       [
         '-NoProfile',
@@ -272,12 +277,17 @@ function stopWatcher() {
         '-Command',
         'Get-CimInstance Win32_Process -Filter "Name like \'AutoHotkey%\'" | ' +
           "Where-Object { $_.CommandLine -like '*music-brain-dev.ahk*' } | " +
-          'ForEach-Object { Stop-Process -Id $_.ProcessId -Force }'
+          'ForEach-Object { Stop-Process -Id $_.ProcessId -Force; $_.ProcessId }'
       ],
-      { timeout: 20000, windowsHide: true, stdio: 'ignore' }
+      { encoding: 'utf8', timeout: 20000, windowsHide: true }
     )
+    return output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
   } catch {
-    // Nothing running, or not ours to stop. Either way the copy below decides.
+    // Nothing running, or not ours to stop.
+    return []
   }
 }
 
@@ -401,8 +411,16 @@ export async function ensureToolkit({ quiet = false } = {}) {
 
   mkdirSync(TOOLKIT_DIR, { recursive: true })
   const watcher = syncWatcher()
+
+  // A running watcher executes the copy of the script it read at startup, so
+  // replacing the file on disk leaves the old code handling requests — with the
+  // old request/status protocol. Stopping it is the whole fix: the next
+  // isolated launch finds nothing running and starts what was just installed.
+  const stoppedPids = watcher.changed ? stopWatcher() : []
+
   say(
-    `Watcher:    ${watcher.changed ? 'installed/updated' : 'already up to date'} → ${WATCHER_INSTALLED}`
+    `Watcher:    ${watcher.changed ? 'installed/updated' : 'already up to date'} → ${WATCHER_INSTALLED}` +
+      (stoppedPids.length ? `; stopped running instance (pid ${stoppedPids.join(', ')})` : '')
   )
 
   // An existing DLL that genuinely works is never replaced, whatever release
@@ -410,7 +428,13 @@ export async function ensureToolkit({ quiet = false } = {}) {
   let check = verifyDll()
   if (check.ok) {
     say(`DLL:        already working (${check.desktops} virtual desktop(s))`)
-    return { ahk, watcherChanged: watcher.changed, dll: 'already-ok', check }
+    return {
+      ahk,
+      watcherChanged: watcher.changed,
+      watcherStopped: stoppedPids,
+      dll: 'already-ok',
+      check
+    }
   }
 
   say(`DLL:        ${check.state} — ${check.detail}`)
@@ -458,6 +482,7 @@ export async function ensureToolkit({ quiet = false } = {}) {
   return {
     ahk,
     watcherChanged: watcher.changed,
+    watcherStopped: stoppedPids,
     dll: 'installed',
     release: choice.tag,
     backedUp,
@@ -477,6 +502,12 @@ if (invokedDirectly) {
         ? 'Setup complete — nothing needed changing.'
         : `Setup complete — ${ASSET_NAME} installed from ${summary.release}.`
     )
+    if (summary.watcherStopped?.length) {
+      log(
+        'The running watcher was stopped so the new one takes effect;' +
+          ' the next `pnpm dev:isolated` starts it.'
+      )
+    }
   } catch (error) {
     if (error instanceof SetupError) {
       console.error(`\n[dev-desktop] SETUP FAILED\n`)
