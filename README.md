@@ -23,6 +23,40 @@ pnpm dev       # start with hot reload
 `pnpm dev` runs the Vite dev server for the renderer and launches Electron against it.
 Editing renderer code hot-reloads; editing main or preload code restarts Electron.
 
+### Windows: keeping agent launches off your current desktop
+
+Two launch paths, told apart by which command you type and nothing else:
+
+```bash
+pnpm dev                   # yours. Always opens on your current desktop
+pnpm dev:isolated          # the agent's. Routed to Windows Virtual Desktop 2
+pnpm dev:isolation:off     # emergency manual off switch
+pnpm dev:isolation:status  # what the watcher and the DLL currently think
+```
+
+`pnpm dev` **disables routing before it launches**, so a flag left behind by an earlier
+isolated run can never divert your own launch. That guarantee is the reason `dev` does
+the work itself rather than trusting anything to have cleaned up.
+
+`pnpm dev:isolated` starts the background watcher if it is not already running, checks it
+can reach `VirtualDesktopAccessor.dll`, enables routing, waits for Desktop 2 to exist, and
+only then starts Electron. If any of that fails it **refuses to launch** rather than
+opening a window on your desktop, which is the outcome the whole feature exists to avoid.
+It switches routing back off when the dev server stops; `pnpm dev` does not depend on that
+having worked.
+
+The repository half is one script, [scripts/dev-desktop-isolation.mjs](scripts/dev-desktop-isolation.mjs),
+which never touches virtual desktops itself — it drives a flag and a status file under
+`%LOCALAPPDATA%\music-brain-dev-desktop\`. The automation is an AutoHotkey v2 watcher
+living outside this repository in `C:\Tools\music-brain-dev-desktop\`, whose `README.md`
+covers setup, window matching and troubleshooting. The watcher matches on `electron.exe`
+plus the exact window title `Music Brain Studio`, so a packaged
+`Music Brain Studio.exe` structurally cannot match and production installs are never
+touched. Nothing in `src/` knows any of this exists.
+
+Requires AutoHotkey v2 and a `VirtualDesktopAccessor.dll` matching your Windows version.
+A Startup-folder entry for the watcher is optional — `pnpm dev:isolated` starts it.
+
 ## Building
 
 ```bash
@@ -38,7 +72,9 @@ platform — electron-builder does not cross-compile these targets.
 
 | Script                  | What it does                                      |
 | ----------------------- | ------------------------------------------------- |
-| `dev`                   | Dev server + Electron, with hot reload            |
+| `dev`                   | Dev server + Electron, on your current desktop    |
+| `dev:isolated`          | Same, routed to Windows Virtual Desktop 2         |
+| `dev:isolation:*`       | `off` / `status` for that routing (Windows only)  |
 | `build`                 | Typecheck, then bundle main, preload and renderer |
 | `start`                 | Run the bundled output as a production app        |
 | `typecheck`             | Typecheck both the Node and the web project       |
