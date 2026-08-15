@@ -29,33 +29,53 @@ Two launch paths, told apart by which command you type and nothing else:
 
 ```bash
 pnpm dev                   # yours. Always opens on your current desktop
-pnpm dev:isolated          # the agent's. Routed to Windows Virtual Desktop 2
+pnpm dev:isolated          # the agent's. Never opens on your current desktop
 pnpm dev:isolation:off     # emergency manual off switch
-pnpm dev:isolation:status  # what the watcher and the DLL currently think
+pnpm dev:isolation:status  # the watcher's view: DLL, desktops, chosen target
 ```
 
 `pnpm dev` **disables routing before it launches**, so a flag left behind by an earlier
 isolated run can never divert your own launch. That guarantee is the reason `dev` does
 the work itself rather than trusting anything to have cleaned up.
 
-`pnpm dev:isolated` starts the background watcher if it is not already running, checks it
-can reach `VirtualDesktopAccessor.dll`, enables routing, waits for Desktop 2 to exist, and
-only then starts Electron. If any of that fails it **refuses to launch** rather than
-opening a window on your desktop, which is the outcome the whole feature exists to avoid.
-It switches routing back off when the dev server stops; `pnpm dev` does not depend on that
-having worked.
+`pnpm dev:isolated` picks its desktop **dynamically** — there is no fixed target. In
+priority order:
+
+1. **Never the active desktop.** This is the invariant; everything below is subordinate.
+2. **Follow the workspace.** If this project's own VS Code window is on some other
+   desktop, the app is routed there, so it lands beside the workspace it belongs to. Move
+   that VS Code window to another desktop and the next launch follows it.
+3. **Otherwise any inactive desktop** — used when the workspace window is on the desktop
+   you are looking at, cannot be found, or several windows match it ambiguously. The
+   reason is always reported rather than guessed at silently.
+
+`MUSIC_BRAIN_DEV_DESKTOP_TARGET=<index>` forces a specific desktop and skips discovery.
+Because you asked for it explicitly, that one may be the active desktop.
+
+Before launching, the command starts the watcher if needed, checks it can reach
+`VirtualDesktopAccessor.dll`, and confirms a safe target exists. If any of that fails it
+**refuses to launch** rather than opening a window on your desktop, which is the outcome
+the whole feature exists to avoid. It switches routing back off when the dev server stops;
+`pnpm dev` does not depend on that having worked.
 
 The repository half is one script, [scripts/dev-desktop-isolation.mjs](scripts/dev-desktop-isolation.mjs),
-which never touches virtual desktops itself — it drives a flag and a status file under
-`%LOCALAPPDATA%\music-brain-dev-desktop\`. The automation is an AutoHotkey v2 watcher
-living outside this repository in `C:\Tools\music-brain-dev-desktop\`, whose `README.md`
-covers setup, window matching and troubleshooting. The watcher matches on `electron.exe`
-plus the exact window title `Music Brain Studio`, so a packaged
-`Music Brain Studio.exe` structurally cannot match and production installs are never
-touched. Nothing in `src/` knows any of this exists.
+which never touches virtual desktops itself. It works out _what to look for_ — the folder
+name and the VS Code instance that owns the running process, found by walking the parent
+chain — and writes that as a request under `%LOCALAPPDATA%\music-brain-dev-desktop\`. The
+automation is an AutoHotkey v2 watcher living outside this repository in
+`C:\Tools\music-brain-dev-desktop\`, which owns every call into VirtualDesktopAccessor,
+resolves the target and publishes its decision back. That folder's `README.md` covers
+setup, window matching and troubleshooting.
 
-Requires AutoHotkey v2 and a `VirtualDesktopAccessor.dll` matching your Windows version.
-A Startup-folder entry for the watcher is optional — `pnpm dev:isolated` starts it.
+The watcher matches the window it moves on `electron.exe` plus the exact title
+`Music Brain Studio`, so a packaged `Music Brain Studio.exe` structurally cannot match and
+production installs are never touched. Nothing in `src/` knows any of this exists, and no
+code path ever switches your active desktop.
+
+Requires AutoHotkey v2, a `VirtualDesktopAccessor.dll` matching your Windows version, and
+**at least two virtual desktops** — on Windows 10 the DLL cannot create one, and Windows
+forgets them on reboot, so `Win+Ctrl+D` once per session may be needed. A Startup-folder
+entry for the watcher is optional; `pnpm dev:isolated` starts it.
 
 ## Building
 
@@ -73,7 +93,7 @@ platform — electron-builder does not cross-compile these targets.
 | Script                  | What it does                                      |
 | ----------------------- | ------------------------------------------------- |
 | `dev`                   | Dev server + Electron, on your current desktop    |
-| `dev:isolated`          | Same, routed to Windows Virtual Desktop 2         |
+| `dev:isolated`          | Same, routed away from your active desktop        |
 | `dev:isolation:*`       | `off` / `status` for that routing (Windows only)  |
 | `build`                 | Typecheck, then bundle main, preload and renderer |
 | `start`                 | Run the bundled output as a production app        |

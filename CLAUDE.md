@@ -13,5 +13,7 @@ current desktop.
 - If Electron must be opened, use the isolated command.
 - Do not manually disable isolation before a UI test.
 
-`pnpm dev:isolated` routes the window to Windows Virtual Desktop 2 and refuses to launch if
-it cannot, rather than opening on the user's desktop. See the README for how it works.
+`pnpm dev:isolated` chooses its virtual desktop dynamically. It follows the Music Brain
+Studio VS Code window when that window is on another desktop, otherwise it routes to any
+inactive desktop, and it never intentionally opens the app on the user's active desktop.
+If it cannot find a safe desktop it refuses to launch rather than interrupting them.

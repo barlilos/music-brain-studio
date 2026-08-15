@@ -2,34 +2,43 @@
  * Windows development-desktop routing for Music Brain Studio.
  *
  * Two launch paths, distinguished by command and nothing else — no parent
- * process inspection, no guessing who started the app:
+ * process inspection to decide *who* is launching, no heuristics:
  *
  *   pnpm dev            disables routing, then launches. Always opens on the
  *                       desktop you are looking at, even if an earlier
  *                       isolated run left the flag behind.
- *   pnpm dev:isolated   starts the watcher if needed, verifies it can talk to
- *                       VirtualDesktopAccessor, enables routing, then launches.
- *                       Refuses to launch at all if any of that fails, because
- *                       an unrouted window landing on the user's desktop is the
- *                       exact outcome this exists to prevent.
+ *   pnpm dev:isolated   picks a desktop that is never the active one, enables
+ *                       routing, then launches. Refuses to launch if it cannot,
+ *                       because an unrouted window landing on the user's
+ *                       desktop is the exact outcome this exists to prevent.
  *
- * This file never loads the DLL or touches virtual desktops itself. The
- * automation is an AutoHotkey v2 watcher living outside this repository, in
- * `C:\Tools\music-brain-dev-desktop\`; the only contract between the two halves
- * is the state directory below. Nothing here is imported by the application,
- * and `electron-builder.yml` ships only `out/**` and `package.json`, so none of
- * it reaches a build.
+ * Target selection is dynamic. The preferred target is the desktop holding this
+ * project's own VS Code window, so the app follows the workspace when it moves;
+ * but that preference is always subordinate to never using the active desktop.
+ *
+ * This file never loads the DLL or touches virtual desktops. It resolves *who*
+ * to look for — the workspace name and the VS Code instance that owns this
+ * process — and hands that to an AutoHotkey v2 watcher living outside this
+ * repository, in `C:\Tools\music-brain-dev-desktop\`, which owns every call
+ * into VirtualDesktopAccessor. The contract is two files in the state
+ * directory: a request this writes, and a status the watcher publishes.
+ *
+ * Nothing here is imported by the application, and `electron-builder.yml` ships
+ * only `out/**` and `package.json`, so none of it reaches a build.
  *
  * Usage: node scripts/dev-desktop-isolation.mjs <run|off|status>
  */
 
-import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 
 /** Where the watcher and its DLL live. Overridable for a non-default install. */
 const TOOLKIT_DIR = process.env.MUSIC_BRAIN_DEV_DESKTOP_HOME ?? 'C:\\Tools\\music-brain-dev-desktop'
 const WATCHER_SCRIPT = join(TOOLKIT_DIR, 'music-brain-dev.ahk')
+
+/** Diagnostic escape hatch: force a desktop index and skip discovery entirely. */
+const TARGET_OVERRIDE = process.env.MUSIC_BRAIN_DEV_DESKTOP_TARGET ?? ''
 
 const AHK_CANDIDATES = [
   process.env.AUTOHOTKEY_EXE,
@@ -43,6 +52,7 @@ const STATE_DIR = process.env.LOCALAPPDATA
   : null
 const FLAG_FILE = STATE_DIR ? join(STATE_DIR, 'enabled.flag') : null
 const STATUS_FILE = STATE_DIR ? join(STATE_DIR, 'watcher.status') : null
+const REQUEST_FILE = STATE_DIR ? join(STATE_DIR, 'target.request') : null
 
 const ELECTRON_VITE = join('node_modules', 'electron-vite', 'bin', 'electron-vite.js')
 
@@ -79,11 +89,11 @@ const isRoutingOn = () => Boolean(FLAG_FILE && existsSync(FLAG_FILE))
 
 // -------------------------------------------------------------- watcher state
 
-/** Parses the watcher's `key=value` status file. Returns null if unreadable. */
-function readStatus() {
-  if (!STATUS_FILE || !existsSync(STATUS_FILE)) return null
+/** Parses a `key=value` file. Returns null if unreadable. */
+function readKeyValues(path) {
+  if (!path || !existsSync(path)) return null
   try {
-    const raw = readFileSync(STATUS_FILE, 'utf8')
+    const raw = readFileSync(path, 'utf8')
     // Tolerate a byte-order mark, whatever wrote the file: left in place it
     // would glue itself to the first key name and silently break every lookup.
     const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw
@@ -92,7 +102,7 @@ function readStatus() {
       .filter(Boolean)
       .map((line) => {
         const i = line.indexOf('=')
-        return [line.slice(0, i), line.slice(i + 1)]
+        return [line.slice(0, i), line.slice(i + 1).replace(/\r$/, '')]
       })
     return Object.fromEntries(entries)
   } catch {
@@ -106,7 +116,7 @@ function readStatus() {
  * kill, and not a pid that has since been reused by something else.
  */
 function watcherState() {
-  const status = readStatus()
+  const status = readKeyValues(STATUS_FILE)
   if (!status?.pid || !status?.ts) return { running: false, status: null }
 
   const age = Math.floor(Date.now() / 1000) - Number(status.ts)
@@ -162,6 +172,117 @@ async function waitFor(predicate, timeoutMs = READY_TIMEOUT_MS) {
   return last
 }
 
+// ------------------------------------------------------- workspace discovery
+
+/**
+ * Finds the VS Code instance that owns this process by walking the parent
+ * chain, and returns its main process id.
+ *
+ * Verified shape of the chain when an agent runs this from the extension host:
+ *   node -> claude.exe -> Code.exe (extension host, --type=utility)
+ *                      -> Code.exe (main, no --type) -> explorer.exe
+ *
+ * The *last* Code.exe in the chain is the main process, which is what owns
+ * every window of that instance — so it is the right filter for "windows
+ * belonging to my VS Code". Child Code.exe processes carry a `--type=` switch;
+ * the main one does not. Returns 0 when not launched under VS Code at all,
+ * which simply widens the later search rather than breaking it.
+ */
+function findVSCodeMainPid() {
+  let processes
+  try {
+    const csv = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Csv -NoTypeInformation'
+      ],
+      { encoding: 'utf8', timeout: 20000, windowsHide: true, maxBuffer: 32 * 1024 * 1024 }
+    )
+    processes = parseProcessCsv(csv)
+  } catch {
+    return 0
+  }
+
+  let pid = process.pid
+  let mainPid = 0
+  for (let hop = 0; hop < 20; hop++) {
+    const entry = processes.get(pid)
+    if (!entry) break
+    if (entry.name.toLowerCase() === 'code.exe' && !/--type=/.test(entry.commandLine)) {
+      mainPid = pid
+      break
+    }
+    if (!entry.parent || entry.parent === pid) break
+    pid = entry.parent
+  }
+  return mainPid
+}
+
+/** Minimal CSV reader for the fixed four-column shape produced above. */
+function parseProcessCsv(csv) {
+  const map = new Map()
+  const lines = csv.split(/\r?\n/)
+  for (const line of lines) {
+    if (!line || line.startsWith('"ProcessId"')) continue
+    const fields = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"'
+          i++
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (ch === ',' && !inQuotes) {
+        fields.push(current)
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+    fields.push(current)
+    if (fields.length < 3) continue
+    const id = Number(fields[0])
+    if (!Number.isFinite(id)) continue
+    map.set(id, {
+      parent: Number(fields[1]) || 0,
+      name: fields[2] ?? '',
+      commandLine: fields[3] ?? ''
+    })
+  }
+  return map
+}
+
+/** Publishes what to look for. Written atomically so the watcher never reads half of it. */
+function writeRequest(fields) {
+  mkdirSync(STATE_DIR, { recursive: true })
+  const body = Object.entries(fields)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n')
+  const tmp = `${REQUEST_FILE}.tmp`
+  writeFileSync(tmp, `${body}\n`)
+  renameSync(tmp, REQUEST_FILE)
+}
+
+const REASON_TEXT = {
+  workspace: 'following this project\u2019s VS Code window',
+  'workspace-active-fallback':
+    'this project\u2019s VS Code window is on your ACTIVE desktop, so an inactive one was used instead',
+  'workspace-not-found-fallback':
+    'no VS Code window for this workspace was found, so an inactive desktop was used',
+  'workspace-desktop-unknown-fallback':
+    'the VS Code window\u2019s desktop could not be determined, so an inactive desktop was used',
+  'ambiguous-fallback':
+    'several VS Code windows matched this workspace, so none was chosen and an inactive desktop was used',
+  override: 'explicit MUSIC_BRAIN_DEV_DESKTOP_TARGET override'
+}
+
 // -------------------------------------------------------------------- preflight
 
 async function prepareIsolation() {
@@ -190,22 +311,70 @@ async function prepareIsolation() {
     ])
   }
 
-  setRouting(true)
-  log('Routing enabled.')
+  const workspaceName = basename(process.cwd())
+  const vscodePid = TARGET_OVERRIDE ? 0 : findVSCodeMainPid()
+  const requestId = `${Date.now()}-${process.pid}`
 
-  // The watcher creates the target desktop if Windows does not have one yet,
-  // but only once routing is on — so this wait comes after enabling, not before.
-  const target = Number(status.target ?? 1)
-  const ready = await waitFor((s) => s.routing === 'on' && Number(s.desktops) > target)
-  if (!ready?.running || Number(ready.status?.desktops) <= target) {
-    setRouting(false)
-    fail(
-      `Windows Desktop ${target + 1} does not exist and could not be created ` +
-        `(the watcher reports ${ready?.status?.desktops ?? '?'} desktop(s)).`,
-      ['Create a second desktop in Task View (Win+Tab), then try again']
+  if (TARGET_OVERRIDE) {
+    log(`Target override requested: desktop index ${TARGET_OVERRIDE}`)
+  } else {
+    log(
+      `Looking for the VS Code window for "${workspaceName}"` +
+        (vscodePid ? ` in VS Code instance ${vscodePid}.` : ' (no VS Code parent detected).')
     )
   }
-  log(`Desktop ${target + 1} ready (${ready.status.desktops} virtual desktops).`)
+
+  writeRequest({
+    request_id: requestId,
+    workspace_name: workspaceName,
+    vscode_pid: vscodePid,
+    override: TARGET_OVERRIDE
+  })
+
+  // The watcher answers this exact request; an older answer must never be
+  // mistaken for this one.
+  const answered = await waitFor((s) => s.request_id === requestId)
+  if (!answered?.running || answered.status?.request_id !== requestId) {
+    fail('The watcher did not answer the target request within 15 seconds.', [
+      `request id: ${requestId}`,
+      `check the log: ${STATE_DIR ? join(STATE_DIR, 'watcher.log') : 'watcher.log'}`
+    ])
+  }
+
+  const status2 = answered.status
+  if (status2.resolved_target === 'unknown' || status2.resolve_error) {
+    fail(`No safe desktop could be chosen: ${status2.resolve_error || 'no target resolved'}`, [
+      `active desktop index: ${status2.current_desktop}`,
+      `virtual desktops: ${status2.desktops}`,
+      'Windows 10 loses virtual desktops on reboot, and this DLL cannot create them',
+      'Create a second desktop with Win+Ctrl+D, then try again',
+      'or force one with MUSIC_BRAIN_DEV_DESKTOP_TARGET=<index>'
+    ])
+  }
+
+  const target = Number(status2.resolved_target)
+  const active = Number(status2.current_desktop)
+
+  // Belt and braces: the whole point is that this can never be the active one.
+  if (!TARGET_OVERRIDE && Number.isFinite(active) && target === active) {
+    fail(`Refusing to launch: the chosen desktop ${target} is the active desktop.`, [
+      `target_reason was ${status2.target_reason}`,
+      'this is a bug in target selection — please report it'
+    ])
+  }
+
+  setRouting(true)
+
+  const reason = REASON_TEXT[status2.target_reason] ?? status2.target_reason
+  log(`Target: desktop index ${target} (Windows Desktop ${target + 1}) — ${reason}.`)
+  if (status2.workspace_candidates && status2.workspace_candidates !== '1') {
+    log(
+      `Workspace candidates: ${status2.workspace_candidates}${
+        status2.candidate_titles ? ` — ${status2.candidate_titles}` : ''
+      }`
+    )
+  }
+  log(`Your active desktop (${active}) will not change.`)
 }
 
 // ------------------------------------------------------------------- launching
@@ -283,13 +452,18 @@ if (process.platform !== 'win32' || !FLAG_FILE) {
 
     case 'status': {
       const { running, status } = watcherState()
-      log(`Routing:  ${isRoutingOn() ? 'ENABLED' : 'disabled'}`)
-      log(`Watcher:  ${running ? `running (pid ${status.pid})` : 'not running'}`)
+      log(`Routing:   ${isRoutingOn() ? 'ENABLED' : 'disabled'}`)
+      log(`Watcher:   ${running ? `running (pid ${status.pid})` : 'not running'}`)
       if (status) {
-        log(`DLL:      ${status.dll}${status.detail ? ` — ${status.detail}` : ''}`)
-        log(`Desktops: ${status.desktops} (target index ${status.target})`)
+        log(`DLL:       ${status.dll}${status.detail ? ` — ${status.detail}` : ''}`)
+        log(`Desktops:  ${status.desktops}, active index ${status.current_desktop}`)
+        log(
+          `Workspace: desktop ${status.workspace_desktop} from ${status.workspace_candidates} candidate(s)`
+        )
+        log(`Target:    ${status.resolved_target} (${status.target_reason})`)
+        if (status.resolve_error) log(`Error:     ${status.resolve_error}`)
       }
-      log(`Flag:     ${FLAG_FILE}`)
+      log(`Flag:      ${FLAG_FILE}`)
       break
     }
 
