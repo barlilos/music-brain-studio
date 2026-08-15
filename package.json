@@ -8,7 +8,10 @@
   "main": "./out/main/index.js",
   "scripts": {
     "postinstall": "install-electron",
-    "dev": "electron-vite dev",
+    "dev": "node scripts/dev-desktop-isolation.mjs off && electron-vite dev",
+    "dev:isolated": "node scripts/dev-desktop-isolation.mjs run",
+    "dev:isolation:off": "node scripts/dev-desktop-isolation.mjs off",
+    "dev:isolation:status": "node scripts/dev-desktop-isolation.mjs status",
     "start": "electron-vite preview",
     "build": "pnpm typecheck && electron-vite build",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
