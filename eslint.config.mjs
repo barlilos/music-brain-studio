@@ -19,6 +19,14 @@ export default tseslint.config(
     }
   },
 
+  // Node.js context: repository tooling that never ships with the app.
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node
+    }
+  },
+
   // Chromium context: the React renderer.
   {
     files: ['src/renderer/**/*.{ts,tsx}'],
