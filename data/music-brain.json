@@ -5360,7 +5360,7 @@
                 "outputs": []
               },
               {
-                "id": "quad.base.cab",
+                "id": "quad.base.cab-optimization",
                 "title": "Cab Optimization",
                 "nodeType": "area",
                 "children": [
