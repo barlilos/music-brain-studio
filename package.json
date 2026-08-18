@@ -40,7 +40,8 @@
   "dependencies": {
     "@xyflow/react": "^12.11.3",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "write-file-atomic": "^6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -48,6 +49,7 @@
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/write-file-atomic": "^4.0.3",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^43.3.0",
     "electron-builder": "^26.15.3",
