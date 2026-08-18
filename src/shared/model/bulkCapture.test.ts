@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBulkLines } from '@renderer/components/editing/bulkAdd'
+import { parseBulkLines } from '@shared/model/bulkCapture'
 
 describe('parseBulkLines', () => {
   it('makes one title per line', () => {

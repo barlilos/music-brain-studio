@@ -23,7 +23,7 @@ import {
   NODE_KIND_OPTIONS,
   initialStatusFor
 } from '@renderer/components/editing/nodeKindOptions'
-import { parseBulkLines } from '@renderer/components/editing/bulkAdd'
+import { parseBulkLines } from '@shared/model/bulkCapture'
 
 interface BulkAddDialogProps {
   parentId: NodeId | null
