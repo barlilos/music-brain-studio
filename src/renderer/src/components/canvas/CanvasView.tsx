@@ -29,6 +29,7 @@ import {
 import { buildCanvasGraph, canvasKey, canvasRootFor } from '@shared/model/canvas'
 import type { NodeIndex } from '@shared/model/nodeIndex'
 import type { WorkStatus } from '@shared/model/workStatus'
+import type { ProgressIndex } from '@shared/model/progress'
 import { layoutCanvas } from '@renderer/components/canvas/canvasLayout'
 import { toCanvasViewModel } from '@renderer/components/canvas/canvasViewModel'
 import {
@@ -87,6 +88,13 @@ interface CanvasViewProps {
   onSelect: (nodeId: string) => void
   /** Omitted for a read-only project, which removes the status controls. */
   onCycleStatus?: (nodeId: string, status: WorkStatus) => void
+  /** Omitted for a read-only project, which removes the context menu. */
+  onContextMenu?: (nodeId: string, x: number, y: number) => void
+  renamingNodeId?: string | null
+  onCommitRename?: (nodeId: string, title: string) => void
+  onCancelRename?: () => void
+  /** Per-node work counts, shown under each card's title. */
+  progress?: ProgressIndex
 }
 
 function CanvasFlow({
@@ -94,7 +102,12 @@ function CanvasFlow({
   projectName,
   selectedId,
   onSelect,
-  onCycleStatus
+  onCycleStatus,
+  onContextMenu,
+  renamingNodeId,
+  onCommitRename,
+  onCancelRename,
+  progress
 }: CanvasViewProps): JSX.Element {
   const root = useMemo(() => canvasRootFor(selectedId, index), [selectedId, index])
 
@@ -104,11 +117,21 @@ function CanvasFlow({
   )
 
   const { nodes, edges } = useMemo(
-    () => toReactFlow(toCanvasViewModel(layoutCanvas(graph))),
-    [graph]
+    () => toReactFlow(toCanvasViewModel(layoutCanvas(graph), progress)),
+    [graph, progress]
   )
 
-  const interaction = useMemo(() => ({ onSelect, onCycleStatus }), [onSelect, onCycleStatus])
+  const interaction = useMemo(
+    () => ({
+      onSelect,
+      onCycleStatus,
+      onContextMenu,
+      renamingNodeId,
+      onCommitRename,
+      onCancelRename
+    }),
+    [onSelect, onCycleStatus, onContextMenu, renamingNodeId, onCommitRename, onCancelRename]
+  )
 
   const { fitView } = useReactFlow()
 

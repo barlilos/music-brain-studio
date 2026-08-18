@@ -26,6 +26,12 @@ export interface CanvasInteraction {
    * controls that quietly do nothing.
    */
   onCycleStatus?: (nodeId: string, status: WorkStatus) => void
+  /** Open the shared context menu at a point. Absent on a read-only project. */
+  onContextMenu?: (nodeId: string, x: number, y: number) => void
+  /** The node being renamed *in this surface*, if any. */
+  renamingNodeId?: string | null
+  onCommitRename?: (nodeId: string, title: string) => void
+  onCancelRename?: () => void
 }
 
 const NO_INTERACTION: CanvasInteraction = { onSelect: () => {} }

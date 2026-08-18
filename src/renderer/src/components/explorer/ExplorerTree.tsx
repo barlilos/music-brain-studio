@@ -12,7 +12,10 @@
  * than a future one — and, since an ID is a plain string, makes it serializable.
  *
  * The IDs are opaque here. Nothing in this file, or below it, parses one or
- * assumes anything about how it was produced.
+ * assumes anything about how it was produced. Since milestone 005 they are also
+ * *stable*: renaming, retyping or moving a node keeps its id, so expansion and
+ * selection survive every structural change without this component being told
+ * that one happened.
  */
 
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
@@ -27,13 +30,23 @@ interface ExplorerTreeProps {
   index: NodeIndex
   selectedId: string | null
   onSelect: (nodeId: string) => void
+  /** Opens the shared context menu. Absent on a read-only project. */
+  onContextMenu?: (nodeId: string, x: number, y: number) => void
+  /** The node being renamed in this surface, if any. */
+  renamingId?: string | null
+  onCommitRename?: (nodeId: string, title: string) => void
+  onCancelRename?: () => void
 }
 
 export function ExplorerTree({
   roots,
   index,
   selectedId,
-  onSelect
+  onSelect,
+  onContextMenu,
+  renamingId = null,
+  onCommitRename,
+  onCancelRename
 }: ExplorerTreeProps): JSX.Element {
   // Nothing expanded, which shows the top level and no deeper. The project is
   // the header rather than a row, so this is the state where it alone is open.
@@ -48,6 +61,22 @@ export function ExplorerTree({
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const rows = useMemo(() => flattenTree(roots, expanded), [roots, expanded])
+
+  /*
+   * Expansion is keyed by node id, and identity is stable across rename, retype
+   * and move — so expansion survives every structural change this milestone can
+   * make, with no handling of its own.
+   *
+   * The one thing it must do is forget ids that have stopped existing, or the
+   * set would grow without bound as projects are reloaded. Deletion is out of
+   * scope, so today this is a guard rather than a fix.
+   */
+  useEffect(() => {
+    setExpanded((current) => {
+      const surviving = [...current].filter((id) => index.byId.has(id))
+      return surviving.length === current.size ? current : new Set(surviving)
+    })
+  }, [index])
 
   function toggle(nodeId: string): void {
     setExpanded((current) => {
@@ -142,6 +171,10 @@ export function ExplorerTree({
             isSelected={row.node.id === selectedId}
             onSelect={onSelect}
             onToggle={toggle}
+            onContextMenu={onContextMenu}
+            isRenaming={row.node.id === renamingId}
+            onCommitRename={onCommitRename}
+            onCancelRename={onCancelRename}
           />
         ))}
       </div>

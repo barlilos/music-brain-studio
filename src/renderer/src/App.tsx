@@ -5,10 +5,17 @@ import { CanvasView } from '@renderer/components/canvas/CanvasView'
 import { CanvasLocation } from '@renderer/components/canvas/CanvasLocation'
 import { WorkspaceProvider } from '@renderer/state/WorkspaceProvider'
 import { useWorkspace } from '@renderer/state/workspaceContext'
+import { EditingProvider } from '@renderer/state/EditingProvider'
+import { useEditing } from '@renderer/state/editingContext'
 import { ConfirmDiscard } from '@renderer/components/workspace/ConfirmDiscard'
 import { SaveState } from '@renderer/components/workspace/SaveState'
 import { ReadOnlyBanner } from '@renderer/components/workspace/ReadOnlyBanner'
 import { ConflictBanner } from '@renderer/components/workspace/ConflictBanner'
+import { NodeContextMenu } from '@renderer/components/editing/NodeContextMenu'
+import { AddChildDialog } from '@renderer/components/editing/AddChildDialog'
+import { BulkAddDialog } from '@renderer/components/editing/BulkAddDialog'
+import { MoveDialog } from '@renderer/components/editing/MoveDialog'
+import { Inspector } from '@renderer/components/editing/Inspector'
 
 /**
  * The whole application: open into a project, find things in the explorer, work
@@ -18,15 +25,16 @@ import { ConflictBanner } from '@renderer/components/workspace/ConflictBanner'
  * which is why the split is 25 / 75 and why selection is owned here rather than
  * by the tree — two views read it, and both may set it.
  *
- * Since milestone 005 the *project* is owned by `WorkspaceProvider` rather than
- * by this component, and no component below sees a document, a token or a file
- * at all. What stays here is what is genuinely view state and shared by both
- * panes: which node is selected. Explorer expansion stays in the tree, and the
- * canvas root is derived rather than stored — three separate concepts, three
- * separate owners, exactly as before.
+ * Since milestone 005 the *project* is owned by `WorkspaceProvider` and the open
+ * *interaction* by `EditingProvider`. No component below sees a document, a
+ * token or a file. What stays here is what is genuinely shared view state:
+ * which node is selected. Explorer expansion stays in the tree, and the canvas
+ * root is derived rather than stored — three separate concepts, three separate
+ * owners, exactly as before.
  */
 function Workspace(): JSX.Element {
   const { state, projection, isDirty, isEditable, commands } = useWorkspace()
+  const editing = useEditing()
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // A node id addresses a node in one project. Carrying a selection into a
@@ -49,7 +57,7 @@ function Workspace(): JSX.Element {
     else void commands.reload()
   }, [isDirty, commands])
 
-  // Ctrl+S / Cmd+S. The same action the header button runs, so there is one
+  // Ctrl+S / Cmd+S. The same action the header control runs, so there is one
   // save path rather than two that can drift.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -62,11 +70,38 @@ function Workspace(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [commands])
 
+  const { endRename, openMenu, openDialog, closeDialog, inspect } = editing
+
+  const commitRename = useCallback(
+    (nodeId: string, title: string) => {
+      commands.rename(nodeId, title)
+      endRename()
+    },
+    [commands, endRename]
+  )
+
+  // Only offered when the project can actually be edited: a read-only file gets
+  // no menu and no rename fields rather than controls that quietly do nothing.
+  const openExplorerMenu = useCallback(
+    (nodeId: string, x: number, y: number) => openMenu({ nodeId, surface: 'explorer', x, y }),
+    [openMenu]
+  )
+  const openCanvasMenu = useCallback(
+    (nodeId: string, x: number, y: number) => openMenu({ nodeId, surface: 'canvas', x, y }),
+    [openMenu]
+  )
+
   // Bound to locals so TypeScript narrows them for the whole tree below; a
   // boolean derived from them would not carry that narrowing.
   const source = state.source
   const content = state.content
   const hasProject = projection !== null && source !== null
+
+  const dialog = editing.dialog
+  const parentNameOf = (parentId: string | null): string =>
+    parentId === null
+      ? (projection?.name ?? 'this project')
+      : (projection?.index.byId.get(parentId)?.label ?? 'this entry')
 
   return (
     <div className="flex h-screen flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
@@ -96,6 +131,18 @@ function Workspace(): JSX.Element {
             </>
           )}
         </div>
+
+        {hasProject && isEditable && (
+          <button
+            type="button"
+            // Adds under whatever is selected, or at the top level when nothing
+            // is — the same rule the canvas root follows.
+            onClick={() => openDialog({ kind: 'addChild', parentId: selectedId })}
+            className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-1 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            Add
+          </button>
+        )}
 
         <button
           type="button"
@@ -142,6 +189,10 @@ function Workspace(): JSX.Element {
               index={projection.index}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              onContextMenu={isEditable ? openExplorerMenu : undefined}
+              renamingId={editing.rename?.surface === 'explorer' ? editing.rename.nodeId : null}
+              onCommitRename={commitRename}
+              onCancelRename={endRename}
             />
           </div>
 
@@ -151,17 +202,53 @@ function Workspace(): JSX.Element {
               projectName={projection.name}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              progress={projection.progress}
               // Undefined on a read-only project, so the cards render no status
-              // controls at all rather than controls that quietly do nothing.
+              // controls and no menu rather than ones that quietly do nothing.
               onCycleStatus={isEditable ? commands.setStatus : undefined}
+              onContextMenu={isEditable ? openCanvasMenu : undefined}
+              renamingNodeId={editing.rename?.surface === 'canvas' ? editing.rename.nodeId : null}
+              onCommitRename={commitRename}
+              onCancelRename={endRename}
             />
           </div>
+
+          {editing.inspecting !== null && (
+            <Inspector nodeId={editing.inspecting} onClose={() => inspect(null)} />
+          )}
         </main>
       ) : (
         <main className="min-h-0 flex-1 overflow-auto">
           <EmptyState isLoading={state.isLoading} onOpenProject={openProject} />
         </main>
       )}
+
+      <NodeContextMenu />
+
+      {dialog?.kind === 'addChild' && (
+        <AddChildDialog
+          parentId={dialog.parentId}
+          parentName={parentNameOf(dialog.parentId)}
+          onClose={closeDialog}
+          // Selecting what was just created is what makes capture feel like one
+          // action rather than two — and it works because identity is stable.
+          onCreated={setSelectedId}
+        />
+      )}
+
+      {dialog?.kind === 'bulkAdd' && (
+        <BulkAddDialog
+          parentId={dialog.parentId}
+          parentName={parentNameOf(dialog.parentId)}
+          onClose={closeDialog}
+          onCreated={(ids) => {
+            const first = ids[0]
+            if (first !== undefined) setSelectedId(first)
+          }}
+        />
+      )}
+
+      {dialog?.kind === 'move' && <MoveDialog nodeId={dialog.nodeId} onClose={closeDialog} />}
 
       {pendingDiscard !== null && (
         <ConfirmDiscard
@@ -185,7 +272,9 @@ function Workspace(): JSX.Element {
 export function App(): JSX.Element {
   return (
     <WorkspaceProvider>
-      <Workspace />
+      <EditingProvider>
+        <Workspace />
+      </EditingProvider>
     </WorkspaceProvider>
   )
 }

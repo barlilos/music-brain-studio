@@ -31,6 +31,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useCanvasInteraction } from '@renderer/components/canvas/canvasInteraction'
 import type { CanvasFlowNode } from '@renderer/components/canvas/toReactFlow'
 import { nextWorkStatus } from '@shared/model/workStatus'
+import { InlineRename } from '@renderer/components/editing/InlineRename'
 
 /**
  * Anchor points for the edge paths.
@@ -66,8 +67,11 @@ const NEXT_STATUS_LABEL: Record<string, string> = {
 
 export function CanvasCard({ data }: NodeProps<CanvasFlowNode>): JSX.Element {
   const { card } = data
-  const { onSelect, onCycleStatus } = useCanvasInteraction()
+  const { onSelect, onCycleStatus, onContextMenu, renamingNodeId, onCommitRename, onCancelRename } =
+    useCanvasInteraction()
   const { presentation } = card
+
+  const isRenaming = card.nodeId !== null && card.nodeId === renamingNodeId
 
   const isDone = card.showsStatus && card.status === 'done'
 
@@ -92,6 +96,15 @@ export function CanvasCard({ data }: NodeProps<CanvasFlowNode>): JSX.Element {
       */}
       <div
         style={{ width: card.width, height: card.height }}
+        onContextMenu={
+          onContextMenu === undefined || card.nodeId === null
+            ? undefined
+            : (event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onContextMenu(card.nodeId ?? '', event.clientX, event.clientY)
+              }
+        }
         className={`mbs-canvas-card flex items-center gap-3 rounded-xl border px-4 select-none ${
           card.isFocused
             ? 'border-indigo-400 bg-white ring-2 ring-indigo-400/40 dark:border-indigo-500 dark:bg-neutral-800 dark:ring-indigo-500/30'
@@ -121,41 +134,50 @@ export function CanvasCard({ data }: NodeProps<CanvasFlowNode>): JSX.Element {
         )}
 
         {/*
-          2. The navigation button. Exactly the behaviour it had before: the
-          project card stands for nothing selectable, and the card that is
-          already selected has nowhere to go.
+          2. The navigation button — or, while this card is being renamed, the
+          field that replaces it. The rename appears only in the surface the user
+          invoked it from, so the same node showing in the explorer keeps its row.
         */}
-        <button
-          type="button"
-          disabled={!card.isNavigable || card.isFocused}
-          onClick={() => {
-            if (card.nodeId !== null) onSelect(card.nodeId)
-          }}
-          title={card.title}
-          aria-current={card.isFocused ? 'true' : undefined}
-          /*
-           * The cursor is the whole affordance on this surface. A navigable card
-           * says "pointer"; the project card and the card you are already on say
-           * "default"; and empty canvas keeps React Flow's own grab, because the
-           * pane still owns everything that is not a card.
-           */
-          className={`flex h-full min-w-0 flex-1 flex-col justify-center gap-0.5 text-left ${
-            card.isNavigable && !card.isFocused ? 'cursor-pointer' : 'cursor-default'
-          }`}
-        >
-          <span
-            className={`truncate text-sm font-medium ${
-              isDone
-                ? 'text-neutral-400 line-through dark:text-neutral-500'
-                : 'text-neutral-800 dark:text-neutral-100'
+        {isRenaming ? (
+          <InlineRename
+            initialValue={card.label ?? ''}
+            onCommit={(title) => onCommitRename?.(card.nodeId ?? '', title)}
+            onCancel={() => onCancelRename?.()}
+            className="h-7 flex-1"
+          />
+        ) : (
+          <button
+            type="button"
+            disabled={!card.isNavigable || card.isFocused}
+            onClick={() => {
+              if (card.nodeId !== null) onSelect(card.nodeId)
+            }}
+            title={card.title}
+            aria-current={card.isFocused ? 'true' : undefined}
+            /*
+             * The cursor is the whole affordance on this surface. A navigable card
+             * says "pointer"; the project card and the card you are already on say
+             * "default"; and empty canvas keeps React Flow's own grab, because the
+             * pane still owns everything that is not a card.
+             */
+            className={`flex h-full min-w-0 flex-1 flex-col justify-center gap-0.5 text-left ${
+              card.isNavigable && !card.isFocused ? 'cursor-pointer' : 'cursor-default'
             }`}
           >
-            {card.title}
-          </span>
-          <span className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">
-            {presentation.name}
-          </span>
-        </button>
+            <span
+              className={`truncate text-sm font-medium ${
+                isDone
+                  ? 'text-neutral-400 line-through dark:text-neutral-500'
+                  : 'text-neutral-800 dark:text-neutral-100'
+              }`}
+            >
+              {card.title}
+            </span>
+            <span className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+              {card.subtitle}
+            </span>
+          </button>
+        )}
       </div>
 
       <EdgeAnchor type="source" position={Position.Right} />
