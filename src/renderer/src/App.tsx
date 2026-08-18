@@ -193,6 +193,7 @@ function Workspace(): JSX.Element {
               renamingId={editing.rename?.surface === 'explorer' ? editing.rename.nodeId : null}
               onCommitRename={commitRename}
               onCancelRename={endRename}
+              progress={projection.progress}
             />
           </div>
 

@@ -26,6 +26,8 @@ import { presentationFor } from '@renderer/components/explorer/nodeKinds'
 import { ChevronIcon } from '@renderer/components/explorer/icons'
 import type { ExplorerRowModel } from '@renderer/components/explorer/flattenTree'
 import { InlineRename } from '@renderer/components/editing/InlineRename'
+import { rowBadgeFor } from '@renderer/components/explorer/rowProgress'
+import type { ProgressSummary } from '@shared/model/progress'
 
 /** Indentation per level, in pixels. Also the width of one indent guide. */
 const INDENT_STEP = 16
@@ -41,6 +43,8 @@ interface ExplorerRowProps {
   isRenaming?: boolean
   onCommitRename?: (nodeId: string, title: string) => void
   onCancelRename?: () => void
+  /** Work below this node, for the badge. */
+  progress?: ProgressSummary
 }
 
 export function ExplorerRow({
@@ -51,7 +55,8 @@ export function ExplorerRow({
   onContextMenu,
   isRenaming = false,
   onCommitRename,
-  onCancelRename
+  onCancelRename,
+  progress
 }: ExplorerRowProps): JSX.Element {
   const { node, depth, hasChildren, isExpanded } = row
   const kind = presentationFor(node.kind)
@@ -61,6 +66,7 @@ export function ExplorerRow({
   // supplies it, so the row never falls back to an array index — which would be
   // the file's structure leaking back into a UI built to hide it.
   const label = node.label ?? `Untitled ${kind.name.toLowerCase()}`
+  const badge = rowBadgeFor(progress, node.children.length)
 
   return (
     <div
@@ -173,12 +179,16 @@ export function ExplorerRow({
           )}
 
           {/*
-            Pushed right, and only while collapsed: it answers "is there anything in
-            here" before you spend a click, and once expanded the answer is on screen.
+            Pushed right, and only while collapsed: it answers "how much is left
+            in here" before you spend a click, and once expanded the answer is on
+            screen. Falls back to the child count when there is no work below.
           */}
-          {hasChildren && !isExpanded && (
-            <span className="ml-auto shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-600">
-              {node.children.length}
+          {hasChildren && !isExpanded && badge !== null && (
+            <span
+              title={badge.title}
+              className="ml-auto shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-600"
+            >
+              {badge.text}
             </span>
           )}
         </button>

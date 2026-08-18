@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { ExplorerNode } from '@shared/model/node'
 import { ancestorIdsOf, type NodeIndex } from '@shared/model/nodeIndex'
+import type { ProgressIndex } from '@shared/model/progress'
 import { flattenTree } from '@renderer/components/explorer/flattenTree'
 import { ExplorerRow } from '@renderer/components/explorer/ExplorerRow'
 import '@renderer/components/explorer/explorer.css'
@@ -36,6 +37,8 @@ interface ExplorerTreeProps {
   renamingId?: string | null
   onCommitRename?: (nodeId: string, title: string) => void
   onCancelRename?: () => void
+  /** Work counts by node id, for the row badges. */
+  progress?: ProgressIndex
 }
 
 export function ExplorerTree({
@@ -46,7 +49,8 @@ export function ExplorerTree({
   onContextMenu,
   renamingId = null,
   onCommitRename,
-  onCancelRename
+  onCancelRename,
+  progress
 }: ExplorerTreeProps): JSX.Element {
   // Nothing expanded, which shows the top level and no deeper. The project is
   // the header rather than a row, so this is the state where it alone is open.
@@ -175,6 +179,7 @@ export function ExplorerTree({
             isRenaming={row.node.id === renamingId}
             onCommitRename={onCommitRename}
             onCancelRename={onCancelRename}
+            progress={progress?.byId.get(row.node.id)}
           />
         ))}
       </div>
