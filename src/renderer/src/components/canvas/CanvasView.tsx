@@ -28,6 +28,7 @@ import {
 } from '@xyflow/react'
 import { buildCanvasGraph, canvasKey, canvasRootFor } from '@shared/model/canvas'
 import type { NodeIndex } from '@shared/model/nodeIndex'
+import type { WorkStatus } from '@shared/model/workStatus'
 import { layoutCanvas } from '@renderer/components/canvas/canvasLayout'
 import { toCanvasViewModel } from '@renderer/components/canvas/canvasViewModel'
 import {
@@ -84,9 +85,17 @@ interface CanvasViewProps {
   projectName: string | undefined
   selectedId: string | null
   onSelect: (nodeId: string) => void
+  /** Omitted for a read-only project, which removes the status controls. */
+  onCycleStatus?: (nodeId: string, status: WorkStatus) => void
 }
 
-function CanvasFlow({ index, projectName, selectedId, onSelect }: CanvasViewProps): JSX.Element {
+function CanvasFlow({
+  index,
+  projectName,
+  selectedId,
+  onSelect,
+  onCycleStatus
+}: CanvasViewProps): JSX.Element {
   const root = useMemo(() => canvasRootFor(selectedId, index), [selectedId, index])
 
   const graph = useMemo(
@@ -99,7 +108,7 @@ function CanvasFlow({ index, projectName, selectedId, onSelect }: CanvasViewProp
     [graph]
   )
 
-  const interaction = useMemo(() => ({ onSelect }), [onSelect])
+  const interaction = useMemo(() => ({ onSelect, onCycleStatus }), [onSelect, onCycleStatus])
 
   const { fitView } = useReactFlow()
 

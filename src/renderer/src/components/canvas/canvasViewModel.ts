@@ -77,10 +77,10 @@ export function toCanvasViewModel(layout: CanvasLayout): CanvasViewModel {
       // two views must never call one node by two names.
       title: card.label ?? `Untitled ${presentation.name.toLowerCase()}`,
       presentation,
-      // The registry decides whether a kind carries work state; the node decides
-      // whether it said anything. A stray `active` on a domain sprouts no
-      // checkbox.
-      showsStatus: presentation.showsStatus && card.status !== undefined,
+      // The registry alone decides this: a stray `active` on a domain sprouts no
+      // checkbox, and a task whose file says nothing about status still gets one
+      // — that control is how the user gives it a state in the first place.
+      showsStatus: presentation.showsStatus,
       status: card.status,
       isFocused: card.id === layout.focusedId,
       isNavigable: card.nodeId !== null

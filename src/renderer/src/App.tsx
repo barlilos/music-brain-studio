@@ -26,7 +26,7 @@ import { ConflictBanner } from '@renderer/components/workspace/ConflictBanner'
  * separate owners, exactly as before.
  */
 function Workspace(): JSX.Element {
-  const { state, projection, isDirty, commands } = useWorkspace()
+  const { state, projection, isDirty, isEditable, commands } = useWorkspace()
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // A node id addresses a node in one project. Carrying a selection into a
@@ -151,6 +151,9 @@ function Workspace(): JSX.Element {
               projectName={projection.name}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              // Undefined on a read-only project, so the cards render no status
+              // controls at all rather than controls that quietly do nothing.
+              onCycleStatus={isEditable ? commands.setStatus : undefined}
             />
           </div>
         </main>
