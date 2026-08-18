@@ -23,7 +23,8 @@ export default defineConfig({
   resolve: { alias },
   test: {
     // Co-located with what they test, so a module and its tests move together.
-    include: ['src/**/*.test.ts'],
+    // The launcher is plain ESM and is tested as such.
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
     // Everything under test is either isomorphic or main-process code. Nothing
     // here renders, so there is no reason to pay for a DOM.
     environment: 'node'

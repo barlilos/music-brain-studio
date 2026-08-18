@@ -6,11 +6,19 @@
  *
  *   pnpm dev            disables routing, then launches. Always opens on the
  *                       desktop you are looking at, even if an earlier
- *                       isolated run left the flag behind.
+ *                       isolated run left the flag behind, and always against
+ *                       the real knowledge base.
  *   pnpm dev:isolated   picks a desktop that is never the active one, enables
- *                       routing, then launches. Refuses to launch if it cannot,
- *                       because an unrouted window landing on the user's
- *                       desktop is the exact outcome this exists to prevent.
+ *                       routing, gives the app a disposable copy of the data
+ *                       file, then launches. Refuses to launch if it cannot
+ *                       find a safe desktop, because an unrouted window landing
+ *                       on the user's desktop is the exact outcome this exists
+ *                       to prevent.
+ *
+ * Since milestone 005 the isolation is twofold: the *desktop* the window opens
+ * on, and the *file* it can write to. The second matters more — a window on the
+ * wrong desktop is an annoyance, while a save against the real file is data
+ * loss. See `./dev-isolated-workspace.mjs`.
  *
  * Target selection is dynamic. The preferred target is the desktop holding this
  * project's own VS Code window, so the app follows the workspace when it moves;
@@ -32,6 +40,11 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import {
+  DEV_PROJECT_FILE_ENV,
+  createIsolatedWorkspace,
+  disposeIsolatedWorkspace
+} from './dev-isolated-workspace.mjs'
 import {
   DLL_PATH,
   SetupError,
@@ -419,9 +432,11 @@ async function prepareIsolation() {
  * Runs the dev server as a child so routing can be switched off again when it
  * stops. Cleanup is best-effort by design: `pnpm dev` disables routing itself,
  * so a missed cleanup here — a hard kill, a closed terminal, a power cut — can
- * never affect a later manual launch.
+ * never affect a later manual launch. A leftover temp copy is likewise harmless.
+ *
+ * @param {{ disableRoutingOnExit: boolean, isolateData: boolean }} options
  */
-function launchDevServer({ disableRoutingOnExit }) {
+function launchDevServer({ disableRoutingOnExit, isolateData }) {
   // VS Code's extension host exports ELECTRON_RUN_AS_NODE=1 to its children,
   // which makes any Electron binary boot as plain Node and die on
   // `app.whenReady()`. This command is the one an agent runs from inside that
@@ -429,12 +444,27 @@ function launchDevServer({ disableRoutingOnExit }) {
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
 
+  // Never inherited: a stale value from an earlier isolated run must not decide
+  // which file a later `pnpm dev` opens.
+  delete env[DEV_PROJECT_FILE_ENV]
+
+  const workspace = isolateData ? createIsolatedWorkspace() : null
+  if (workspace) {
+    env[DEV_PROJECT_FILE_ENV] = workspace.projectPath
+    log(`Data: ISOLATED COPY — the app may write freely; ${workspace.sourcePath} is untouched.`)
+  } else if (isolateData) {
+    log('Data: REAL FILE — no isolated copy could be made. Saving will write to it.')
+  } else {
+    log('Data: REAL FILE.')
+  }
+
   const child = spawn(process.execPath, [ELECTRON_VITE, 'dev'], { stdio: 'inherit', env })
 
   let cleanedUp = false
   const cleanUp = () => {
     if (cleanedUp) return
     cleanedUp = true
+    disposeIsolatedWorkspace(workspace)
     if (disableRoutingOnExit) {
       setRouting(false)
       log('Routing disabled.')
@@ -468,7 +498,9 @@ if (process.platform !== 'win32' || !FLAG_FILE) {
   // Nothing to protect: there are no Windows virtual desktops here.
   if (command === 'run') {
     log('Not Windows — launching without desktop routing.')
-    launchDevServer({ disableRoutingOnExit: false })
+    // Data isolation is not Windows-specific and is the half that protects the
+    // knowledge base, so it still applies here.
+    launchDevServer({ disableRoutingOnExit: false, isolateData: true })
   } else {
     log('Windows-only; nothing to do.')
   }
@@ -476,7 +508,7 @@ if (process.platform !== 'win32' || !FLAG_FILE) {
   switch (command) {
     case 'run': {
       await prepareIsolation()
-      launchDevServer({ disableRoutingOnExit: true })
+      launchDevServer({ disableRoutingOnExit: true, isolateData: true })
       break
     }
 

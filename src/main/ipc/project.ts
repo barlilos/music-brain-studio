@@ -1,7 +1,12 @@
 import { basename, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { app, dialog, ipcMain } from 'electron'
-import { DEFAULT_PROJECT_PATH, IPC_LOAD_DEFAULT_PROJECT, IPC_OPEN_PROJECT } from '@shared/constants'
+import {
+  DEFAULT_PROJECT_PATH,
+  DEV_PROJECT_FILE_ENV,
+  IPC_LOAD_DEFAULT_PROJECT,
+  IPC_OPEN_PROJECT
+} from '@shared/constants'
 import type { LoadProjectResult, OpenProjectResult, ProjectDocument } from '@shared/types'
 
 /**
@@ -30,10 +35,28 @@ function describeError(error: unknown): string {
  * - **Packaged** — the app is inside an asar archive that `data/` is not part
  *   of, so it ships alongside via electron-builder's `extraResources` and is
  *   found under `process.resourcesPath`.
+ *
+ * In development one override is honoured: `DEV_PROJECT_FILE_ENV`, set by
+ * `pnpm dev:isolated` to a disposable copy. It is deliberately gated on
+ * `!app.isPackaged`, so no environment variable can redirect a shipped
+ * application, and it comes from the launcher rather than from anything the
+ * renderer can reach.
  */
 function defaultProjectPath(): string {
+  if (!app.isPackaged) {
+    const override = process.env[DEV_PROJECT_FILE_ENV]
+    if (override !== undefined && override.length > 0) {
+      // Logged so a development session always says which file it is about to
+      // edit. The path stays in this process; the renderer is never told it.
+      console.log(`[project] Default project: ISOLATED COPY — ${override}`)
+      return override
+    }
+  }
+
   const root = app.isPackaged ? process.resourcesPath : app.getAppPath()
-  return join(root, DEFAULT_PROJECT_PATH)
+  const real = join(root, DEFAULT_PROJECT_PATH)
+  if (!app.isPackaged) console.log(`[project] Default project: REAL — ${real}`)
+  return real
 }
 
 /**

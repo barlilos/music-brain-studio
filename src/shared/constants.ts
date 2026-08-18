@@ -57,5 +57,22 @@ export const IPC_LOAD_DEFAULT_PROJECT = 'project:loadDefault'
  */
 export const DEFAULT_PROJECT_PATH = 'data/music-brain.json'
 
+/**
+ * Environment variable naming a development-only replacement for the default
+ * project.
+ *
+ * Set by `pnpm dev:isolated` to a disposable copy in the system temp directory,
+ * so that a development session can add, rename, move and save without any of it
+ * reaching the real knowledge base. `pnpm dev` never sets it.
+ *
+ * **Must match `DEV_PROJECT_FILE_ENV` in `scripts/dev-isolated-workspace.mjs`.**
+ * The launcher is plain ESM and cannot import this file.
+ *
+ * Honoured only when `app.isPackaged` is false, so it cannot be used to redirect
+ * a shipped application. It is read in the main process and never travels to the
+ * renderer, which has no field to carry a path in the first place.
+ */
+export const DEV_PROJECT_FILE_ENV = 'MUSIC_BRAIN_DEV_PROJECT_FILE'
+
 /** The `window` property the preload script publishes its project API on. */
 export const PROJECT_API_NAMESPACE = 'projectApi'
