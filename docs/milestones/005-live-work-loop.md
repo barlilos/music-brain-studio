@@ -1,7 +1,7 @@
 # 005 — Live Work Loop
 
 **Branch:** `feature/live-work-loop`
-**Status:** approved — implementation in progress
+**Status:** implemented — awaiting review
 
 ## Goal
 
