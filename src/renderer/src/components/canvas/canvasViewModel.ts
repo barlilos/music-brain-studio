@@ -22,6 +22,7 @@
  * structure. Pure, and free of both React and React Flow.
  */
 
+import type { WorkStatus } from '@shared/model/workStatus'
 import { presentationFor, type NodeKindPresentation } from '@renderer/components/explorer/nodeKinds'
 import {
   CARD_HEIGHT,
@@ -41,9 +42,9 @@ export interface CanvasCardView {
   title: string
   /** The registry entry, looked up once. No consumer resolves a kind again. */
   presentation: NodeKindPresentation
-  /** Whether to draw completion at all, and what to draw. Both pre-decided. */
-  showsCompletion: boolean
-  isComplete: boolean | undefined
+  /** Whether to draw work state at all, and what to draw. Both pre-decided. */
+  showsStatus: boolean
+  status: WorkStatus | undefined
   isFocused: boolean
   /** False for the project card, which stands for nothing selectable. */
   isNavigable: boolean
@@ -76,10 +77,11 @@ export function toCanvasViewModel(layout: CanvasLayout): CanvasViewModel {
       // two views must never call one node by two names.
       title: card.label ?? `Untitled ${presentation.name.toLowerCase()}`,
       presentation,
-      // The registry decides whether a kind carries completion; the node decides
-      // whether it said anything. A stray `done` on an area sprouts no checkbox.
-      showsCompletion: presentation.showsCompletion && card.isComplete !== undefined,
-      isComplete: card.isComplete,
+      // The registry decides whether a kind carries work state; the node decides
+      // whether it said anything. A stray `active` on a domain sprouts no
+      // checkbox.
+      showsStatus: presentation.showsStatus && card.status !== undefined,
+      status: card.status,
       isFocused: card.id === layout.focusedId,
       isNavigable: card.nodeId !== null
     }

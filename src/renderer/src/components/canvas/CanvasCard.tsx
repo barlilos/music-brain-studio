@@ -50,7 +50,7 @@ export function CanvasCard({ data }: NodeProps<CanvasFlowNode>): JSX.Element {
   const { onSelect } = useCanvasInteraction()
   const { presentation } = card
 
-  const isComplete = card.showsCompletion && card.isComplete === true
+  const isDone = card.showsStatus && card.status === 'done'
 
   return (
     <>
@@ -89,13 +89,13 @@ export function CanvasCard({ data }: NodeProps<CanvasFlowNode>): JSX.Element {
           vary express completion through the struck-through title below.
         */}
         <span className={`shrink-0 [&>svg]:h-5 [&>svg]:w-5 ${presentation.iconClassName}`}>
-          <presentation.Icon isComplete={card.showsCompletion ? card.isComplete : undefined} />
+          <presentation.Icon status={card.showsStatus ? card.status : undefined} />
         </span>
 
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span
             className={`truncate text-sm font-medium ${
-              isComplete
+              isDone
                 ? 'text-neutral-400 line-through dark:text-neutral-500'
                 : 'text-neutral-800 dark:text-neutral-100'
             }`}

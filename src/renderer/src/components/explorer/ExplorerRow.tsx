@@ -44,7 +44,7 @@ export function ExplorerRow({
   const { node, depth, hasChildren, isExpanded } = row
   const kind = presentationFor(node.kind)
 
-  const isComplete = kind.showsCompletion && node.isComplete === true
+  const isDone = kind.showsStatus && node.status === 'done'
   // An untitled node still needs something clickable and identifiable. The kind
   // supplies it, so the row never falls back to an array index — which would be
   // the file's structure leaking back into a UI built to hide it.
@@ -117,12 +117,12 @@ export function ExplorerRow({
         }`}
       >
         <span className={`shrink-0 ${kind.iconClassName}`}>
-          <kind.Icon isComplete={node.isComplete} />
+          <kind.Icon status={kind.showsStatus ? node.status : undefined} />
         </span>
 
         <span
           className={`truncate ${kind.labelClassName} ${
-            isComplete ? 'text-neutral-400 line-through dark:text-neutral-600' : ''
+            isDone ? 'text-neutral-400 line-through dark:text-neutral-600' : ''
           }`}
         >
           {label}

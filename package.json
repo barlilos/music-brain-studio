@@ -15,6 +15,8 @@
     "dev:isolation:status": "node scripts/dev-desktop-isolation.mjs status",
     "start": "electron-vite preview",
     "build": "pnpm typecheck && electron-vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
@@ -59,6 +61,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.66.0",
-    "vite": "^7.3.6"
+    "vite": "^7.3.6",
+    "vitest": "^3"
   }
 }
