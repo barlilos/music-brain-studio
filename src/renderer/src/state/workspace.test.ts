@@ -215,3 +215,28 @@ describe('commands reach the mutation layer', () => {
     expect(isDirty(state)).toBe(false)
   })
 })
+
+describe('save outcome drives the unsaved-changes guard', () => {
+  /**
+   * The guard may only discard a project once the save has genuinely landed.
+   * The provider derives that boolean from these three outcomes, so they are
+   * pinned here: anything other than a completed save must leave the project
+   * dirty, and therefore not safe to discard.
+   */
+  it('leaves the project dirty after a conflict or a failure, and clean after a save', () => {
+    const edited = edit(opened(), 'Renamed')
+    const revision = editableContentOf(edited)?.state.revision ?? -1
+
+    expect(isDirty(workspaceReducer(edited, { type: 'saveConflicted' }))).toBe(true)
+    expect(isDirty(workspaceReducer(edited, { type: 'saveFailed', message: 'EPERM' }))).toBe(true)
+    expect(
+      isDirty(
+        workspaceReducer(edited, {
+          type: 'saved',
+          diskRevision: 'hash-2',
+          modelRevision: revision
+        })
+      )
+    ).toBe(false)
+  })
+})

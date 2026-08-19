@@ -256,8 +256,20 @@ function Workspace(): JSX.Element {
           action={pendingDiscard}
           onCancel={() => setPendingDiscard(null)}
           onSave={async () => {
-            await commands.save()
+            const action = pendingDiscard
+            const persisted = await commands.save()
+
+            // Closed either way, so that a conflict or write failure is visible
+            // in the banner rather than hidden behind this dialog.
             setPendingDiscard(null)
+
+            // The user asked to open or reload and chose to save first, so
+            // saving has to be followed by the thing they actually asked for.
+            // Only once it is genuinely on disk: a refused save must discard
+            // nothing.
+            if (persisted) {
+              void (action === 'open' ? commands.openAnotherProject() : commands.reload())
+            }
           }}
           onDiscard={() => {
             const action = pendingDiscard

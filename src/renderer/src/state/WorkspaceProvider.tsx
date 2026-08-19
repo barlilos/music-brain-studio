@@ -195,7 +195,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
         dispatch({ type: 'moveNode', nodeId, newParentId, index }),
 
       save: async () => {
-        await runSave()
+        // `failed` covers both a refused write and a revision conflict; either
+        // way the project is not on disk and nothing may be discarded.
+        return (await runSave()) !== 'failed'
       },
 
       reload: async () => {

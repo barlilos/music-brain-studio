@@ -29,7 +29,14 @@ export interface WorkspaceCommands {
   setStatus: (nodeId: NodeId, status: WorkStatus) => void
   move: (nodeId: NodeId, newParentId: NodeId | null, index?: number) => void
 
-  save: () => Promise<void>
+  /**
+   * Writes the project. Resolves to `true` when the work is safely on disk —
+   * saved, or nothing needed saving — and `false` when it was refused or failed.
+   *
+   * The boolean exists because callers act on it: the unsaved-changes guard must
+   * only go on to discard the project once the save actually landed.
+   */
+  save: () => Promise<boolean>
   /** Re-reads the file, discarding everything in memory. For conflict recovery. */
   reload: () => Promise<void>
   openAnotherProject: () => Promise<void>
