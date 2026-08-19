@@ -66,8 +66,19 @@ function requestSave(window: BrowserWindow): Promise<RequestedSaveOutcome> {
 export function installCloseGuard(window: BrowserWindow): void {
   let forcing = false
 
+  /*
+   * Captured now, while the window is alive.
+   *
+   * `window.webContents` throws `Object has been destroyed` once the window has
+   * gone, and `closed` fires precisely then — so reading it inside that handler
+   * turns every ordinary window close into an uncaught main-process exception
+   * and Electron's "Error" dialog. Holding the number instead costs nothing and
+   * cannot be destroyed.
+   */
+  const webContentsId = window.webContents.id
+
   window.on('close', (event) => {
-    if (forcing || !dirtyWindows.has(window.webContents.id)) return
+    if (forcing || !dirtyWindows.has(webContentsId)) return
 
     event.preventDefault()
 
@@ -105,6 +116,6 @@ export function installCloseGuard(window: BrowserWindow): void {
   })
 
   window.on('closed', () => {
-    dirtyWindows.delete(window.webContents.id)
+    dirtyWindows.delete(webContentsId)
   })
 }
