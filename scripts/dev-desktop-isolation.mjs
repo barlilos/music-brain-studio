@@ -34,7 +34,7 @@
  * Nothing here is imported by the application, and `electron-builder.yml` ships
  * only `out/**` and `package.json`, so none of it reaches a build.
  *
- * Usage: node scripts/dev-desktop-isolation.mjs <run|off|status>
+ * Usage: node scripts/dev-desktop-isolation.mjs <run|off|status> [electron-vite args]
  */
 
 import { execFileSync, spawn } from 'node:child_process'
@@ -458,7 +458,24 @@ function launchDevServer({ disableRoutingOnExit, isolateData }) {
     log('Data: REAL FILE.')
   }
 
-  const child = spawn(process.execPath, [ELECTRON_VITE, 'dev'], { stdio: 'inherit', env })
+  /*
+   * Anything after the command is handed to electron-vite untouched, so an
+   * isolated run can be driven by a debugger:
+   *
+   *   pnpm dev:isolated -- --remoteDebuggingPort=9222
+   *
+   * This exists so that verifying the UI never needs `pnpm dev`. Without it the
+   * only way to attach to a renderer would be the command that deliberately
+   * opens on the user's active desktop and against the real knowledge base,
+   * which are the two things this launcher exists to prevent.
+   */
+  const passThrough = process.argv.slice(3)
+  if (passThrough.length > 0) log(`Passing to electron-vite: ${passThrough.join(' ')}`)
+
+  const child = spawn(process.execPath, [ELECTRON_VITE, 'dev', ...passThrough], {
+    stdio: 'inherit',
+    env
+  })
 
   let cleanedUp = false
   const cleanUp = () => {
