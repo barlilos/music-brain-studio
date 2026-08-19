@@ -469,7 +469,10 @@ function launchDevServer({ disableRoutingOnExit, isolateData }) {
    * opens on the user's active desktop and against the real knowledge base,
    * which are the two things this launcher exists to prevent.
    */
-  const passThrough = process.argv.slice(3)
+  // The leading `--` is pnpm's separator, not an argument. Forwarding it would
+  // make electron-vite treat everything after it as positional and silently
+  // ignore the flags.
+  const passThrough = process.argv.slice(3).filter((arg, index) => !(index === 0 && arg === '--'))
   if (passThrough.length > 0) log(`Passing to electron-vite: ${passThrough.join(' ')}`)
 
   const child = spawn(process.execPath, [ELECTRON_VITE, 'dev', ...passThrough], {
