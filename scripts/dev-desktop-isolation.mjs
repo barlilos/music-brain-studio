@@ -34,7 +34,10 @@
  * Nothing here is imported by the application, and `electron-builder.yml` ships
  * only `out/**` and `package.json`, so none of it reaches a build.
  *
- * Usage: node scripts/dev-desktop-isolation.mjs <run|off|status> [electron-vite args]
+ * Usage: node scripts/dev-desktop-isolation.mjs <run|off|status> [args]
+ *
+ * Extra arguments go to electron-vite, except `--project-file=<path>`, which this
+ * script consumes to reuse a disposable project rather than copying a fresh one.
  */
 
 import { execFileSync, spawn } from 'node:child_process'
@@ -43,7 +46,8 @@ import { basename, join } from 'node:path'
 import {
   DEV_PROJECT_FILE_ENV,
   createIsolatedWorkspace,
-  disposeIsolatedWorkspace
+  disposeIsolatedWorkspace,
+  reuseIsolatedWorkspace
 } from './dev-isolated-workspace.mjs'
 import {
   DLL_PATH,
@@ -68,6 +72,21 @@ const STATUS_FILE = STATE_DIR ? join(STATE_DIR, 'watcher.status') : null
 const REQUEST_FILE = STATE_DIR ? join(STATE_DIR, 'target.request') : null
 
 const ELECTRON_VITE = join('node_modules', 'electron-vite', 'bin', 'electron-vite.js')
+
+/**
+ * Reuse an existing disposable project file instead of copying a fresh one.
+ *
+ * Development-only and heavily fenced — see `reuseIsolatedWorkspace`. It exists
+ * so persistence across two real Electron processes can be verified without ever
+ * reaching for `pnpm dev`.
+ */
+const PROJECT_FILE_FLAG = '--project-file'
+
+/** The path asked for on the command line, or `null` when none was. */
+function requestedProjectFile() {
+  const arg = process.argv.slice(3).find((a) => a.startsWith(`${PROJECT_FILE_FLAG}=`))
+  return arg === undefined ? null : arg.slice(PROJECT_FILE_FLAG.length + 1)
+}
 
 /** A status file older than this means the watcher is gone, not merely quiet. */
 const STALE_AFTER_SECONDS = 10
@@ -448,8 +467,34 @@ function launchDevServer({ disableRoutingOnExit, isolateData }) {
   // which file a later `pnpm dev` opens.
   delete env[DEV_PROJECT_FILE_ENV]
 
-  const workspace = isolateData ? createIsolatedWorkspace() : null
-  if (workspace) {
+  /*
+   * Two ways to get a writable project, and only one of them is the norm.
+   *
+   * Without the flag: a fresh disposable copy, as always. With it: reuse a file
+   * the caller prepared, which is what makes "save in one process, reopen in the
+   * next" verifiable at all. The reuse path refuses the real knowledge base and
+   * anything inside `data/`, and refuses to invent a file that is not there.
+   */
+  const requested = requestedProjectFile()
+  const workspace = !isolateData
+    ? null
+    : requested !== null
+      ? reuseIsolatedWorkspace(requested)
+      : createIsolatedWorkspace()
+
+  if (isolateData && requested !== null && workspace === null) {
+    fail(`${PROJECT_FILE_FLAG} was refused: ${requested}`, [
+      'it must be an existing file',
+      'it must not be data/music-brain.json',
+      'it must not live inside the repository data directory'
+    ])
+  }
+
+  if (workspace?.reused) {
+    env[DEV_PROJECT_FILE_ENV] = workspace.projectPath
+    log(`Data: ISOLATED COPY (reused) — ${workspace.projectPath}`)
+    log('The real knowledge base is untouched; this file belongs to whoever made it.')
+  } else if (workspace) {
     env[DEV_PROJECT_FILE_ENV] = workspace.projectPath
     log(`Data: ISOLATED COPY — the app may write freely; ${workspace.sourcePath} is untouched.`)
   } else if (isolateData) {
@@ -472,7 +517,11 @@ function launchDevServer({ disableRoutingOnExit, isolateData }) {
   // The leading `--` is pnpm's separator, not an argument. Forwarding it would
   // make electron-vite treat everything after it as positional and silently
   // ignore the flags.
-  const passThrough = process.argv.slice(3).filter((arg, index) => !(index === 0 && arg === '--'))
+  const passThrough = process.argv
+    .slice(3)
+    .filter((arg, index) => !(index === 0 && arg === '--'))
+    // `--project-file` is this launcher's own, not electron-vite's.
+    .filter((arg) => !arg.startsWith(`${PROJECT_FILE_FLAG}=`))
   if (passThrough.length > 0) log(`Passing to electron-vite: ${passThrough.join(' ')}`)
 
   const child = spawn(process.execPath, [ELECTRON_VITE, 'dev', ...passThrough], {

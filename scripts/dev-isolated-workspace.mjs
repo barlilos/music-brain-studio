@@ -19,9 +19,9 @@
  * only `out/**` and `package.json`, so none of it reaches a build.
  */
 
-import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 
 /**
  * The variable the launcher uses to tell the Electron child which file to open.
@@ -65,6 +65,79 @@ export function createIsolatedWorkspace(sourcePath) {
 }
 
 /**
+ * The real knowledge base, and the directory it lives in.
+ *
+ * Both are resolved against the repository root, which is the launcher's working
+ * directory, so a relative `--project-file` cannot sneak past the checks below by
+ * spelling the same file differently.
+ */
+function realProjectLocations() {
+  const file = resolve(process.cwd(), DEFAULT_PROJECT_PATH)
+  return { file, directory: dirname(file) }
+}
+
+/** Whether `candidate` is the given directory or sits anywhere beneath it. */
+function isInside(candidate, directory) {
+  const rel = relative(directory, candidate)
+  return (
+    rel === '' ||
+    (!rel.startsWith('..') && !rel.startsWith(`..${sep}`) && !resolve(rel).startsWith('..'))
+  )
+}
+
+/**
+ * Reuses a disposable file the caller already prepared, instead of copying a
+ * fresh one.
+ *
+ * **Why this exists.** Every ordinary `dev:isolated` run starts from a pristine
+ * copy, which is exactly right for day-to-day work and makes one thing
+ * impossible to verify: that edits saved by one Electron process are still there
+ * when a *different* Electron process opens the same file. Proving that needs
+ * one file and two launches.
+ *
+ * It is deliberately narrow. This module is a development script that
+ * `electron-builder.yml` never ships, the main process honours the resulting
+ * variable only when `!app.isPackaged`, and the three refusals below mean the
+ * one file it must never reach — the user's real knowledge base — cannot be
+ * named however the path is spelled.
+ *
+ * @param {string} rawPath Absolute or repository-relative path to reuse.
+ * @returns {{ directory: string, projectPath: string, sourcePath: string, reused: true } | null}
+ */
+export function reuseIsolatedWorkspace(rawPath) {
+  const target = resolve(process.cwd(), rawPath)
+  const real = realProjectLocations()
+
+  const refuse = (why) => {
+    console.error(`[dev-data] Refusing to reuse ${target}: ${why}`)
+    return null
+  }
+
+  // 1. Never the real knowledge base, however it was spelled.
+  if (target === real.file) {
+    return refuse('that is the real Music Brain file.')
+  }
+
+  // 2. Never anything inside the repository's data directory, so a copy left
+  //    beside the real file cannot be edited by a development run either.
+  if (isInside(target, real.directory)) {
+    return refuse(`it is inside ${real.directory}, which holds real data.`)
+  }
+
+  // 3. It must already exist. Creating it here would mean this flag could
+  //    quietly invent a project rather than reuse a prepared one.
+  let stats
+  try {
+    stats = statSync(target)
+  } catch {
+    return refuse('no such file. Prepare the disposable copy first.')
+  }
+  if (!stats.isFile()) return refuse('that is not a file.')
+
+  return { directory: dirname(target), projectPath: target, sourcePath: target, reused: true }
+}
+
+/**
  * Removes the copy. Best-effort by design: a leftover temp directory after a
  * hard kill is harmless, and failing the shutdown over it would not be.
  *
@@ -72,6 +145,9 @@ export function createIsolatedWorkspace(sourcePath) {
  */
 export function disposeIsolatedWorkspace(workspace) {
   if (!workspace) return
+  // A reused file belongs to whoever prepared it; this launcher only cleans up
+  // the directories it made itself.
+  if (workspace.reused) return
   try {
     rmSync(workspace.directory, { recursive: true, force: true })
   } catch {

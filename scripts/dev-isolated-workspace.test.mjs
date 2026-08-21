@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   DEV_PROJECT_FILE_ENV,
   createIsolatedWorkspace,
-  disposeIsolatedWorkspace
+  disposeIsolatedWorkspace,
+  reuseIsolatedWorkspace
 } from './dev-isolated-workspace.mjs'
 
 /**
@@ -89,5 +90,59 @@ describe('createIsolatedWorkspace', () => {
 
     const constants = readFileSync('src/shared/constants.ts', 'utf8')
     expect(constants).toContain(`export const DEV_PROJECT_FILE_ENV = '${DEV_PROJECT_FILE_ENV}'`)
+  })
+})
+
+describe('reuseIsolatedWorkspace', () => {
+  /**
+   * The flag exists to make a two-process persistence test possible. Its whole
+   * value depends on it being unable to reach the one file it must never touch,
+   * so each refusal is pinned here.
+   */
+  it('reuses a disposable file that already exists', () => {
+    const workspace = make()
+    const reused = reuseIsolatedWorkspace(workspace.projectPath)
+
+    expect(reused).not.toBeNull()
+    expect(reused.projectPath).toBe(workspace.projectPath)
+    expect(reused.reused).toBe(true)
+  })
+
+  it('refuses the real Music Brain file', () => {
+    expect(reuseIsolatedWorkspace(REAL)).toBeNull()
+    // However it is spelled: relative, and with a redundant traversal.
+    expect(reuseIsolatedWorkspace('data/music-brain.json')).toBeNull()
+    expect(reuseIsolatedWorkspace('./data/../data/music-brain.json')).toBeNull()
+  })
+
+  it('refuses anything inside the repository data directory', () => {
+    const beside = resolve(process.cwd(), 'data/some-copy.json')
+    writeFileSync(beside, '{}', 'utf8')
+    try {
+      expect(reuseIsolatedWorkspace(beside)).toBeNull()
+      expect(reuseIsolatedWorkspace('data/some-copy.json')).toBeNull()
+    } finally {
+      rmSync(beside, { force: true })
+    }
+  })
+
+  it('refuses a file that does not exist rather than creating one', () => {
+    const missing = join(tmpdir(), 'mbs-not-there-98765.json')
+    expect(reuseIsolatedWorkspace(missing)).toBeNull()
+    expect(existsSync(missing)).toBe(false)
+  })
+
+  it('refuses a directory', () => {
+    expect(reuseIsolatedWorkspace(tmpdir())).toBeNull()
+  })
+
+  it('does not delete a reused file when disposed', () => {
+    const workspace = make()
+    const reused = reuseIsolatedWorkspace(workspace.projectPath)
+
+    // The file belongs to whoever prepared it; the launcher only removes the
+    // directories it made itself.
+    disposeIsolatedWorkspace(reused)
+    expect(existsSync(workspace.projectPath)).toBe(true)
   })
 })
