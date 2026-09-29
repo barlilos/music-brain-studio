@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEV_PROJECT_FILE_ENV,
   createIsolatedWorkspace,
@@ -50,6 +50,25 @@ describe('createIsolatedWorkspace', () => {
 
     expect(workspace.directory.startsWith(tmpdir())).toBe(true)
     expect(workspace.projectPath.startsWith(process.cwd())).toBe(false)
+  })
+
+  /**
+   * Stated as its own property rather than left as a consequence of the one
+   * above, because `data/` is the directory that actually matters: it holds the
+   * user's real knowledge base, and a disposable file landing beside it is the
+   * failure this whole module exists to prevent.
+   *
+   * `relative` rather than `startsWith`, so a sibling directory whose name
+   * merely begins with "data" cannot pass by accident.
+   */
+  it('never places the copy inside the repository data directory', () => {
+    const dataDir = resolve(process.cwd(), 'data')
+
+    for (const workspace of [make(), make()]) {
+      const fromData = relative(dataDir, workspace.projectPath)
+      expect(fromData.startsWith('..')).toBe(true)
+      expect(relative(dataDir, workspace.directory).startsWith('..')).toBe(true)
+    }
   })
 
   it('leaves the real file untouched when the copy is rewritten', () => {
@@ -115,19 +134,43 @@ describe('reuseIsolatedWorkspace', () => {
     expect(reuseIsolatedWorkspace('./data/../data/music-brain.json')).toBeNull()
   })
 
-  it('refuses anything inside the repository data directory', () => {
-    const beside = resolve(process.cwd(), 'data/some-copy.json')
-    writeFileSync(beside, '{}', 'utf8')
+  /**
+   * The directory rule is checked *before* the existence check, so proving it
+   * needs no file on disk — and must not create one. An earlier version of this
+   * test wrote `data/some-copy.json` beside the real knowledge base to show that
+   * even a file that genuinely exists there is refused. That put a disposable
+   * test artifact in the one directory this project declares off-limits, and a
+   * killed test run would have left it there.
+   *
+   * The reason string recovers everything that was worth having: it names which
+   * refusal fired, so a pass here cannot be the "no such file" rule answering in
+   * the directory rule's place.
+   */
+  it('refuses anything inside the repository data directory, naming that rule', () => {
+    const reasons = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((message) => reasons.push(message))
+
     try {
-      expect(reuseIsolatedWorkspace(beside)).toBeNull()
+      expect(reuseIsolatedWorkspace(resolve(process.cwd(), 'data/some-copy.json'))).toBeNull()
       expect(reuseIsolatedWorkspace('data/some-copy.json')).toBeNull()
+      expect(reuseIsolatedWorkspace('data/nested/deeper/copy.json')).toBeNull()
     } finally {
-      rmSync(beside, { force: true })
+      spy.mockRestore()
     }
+
+    expect(reasons).toHaveLength(3)
+    for (const reason of reasons) {
+      expect(reason).toContain('which holds real data')
+      expect(reason).not.toContain('no such file')
+    }
+
+    // The point of the rewrite: nothing was created beside the real file.
+    expect(existsSync(resolve(process.cwd(), 'data/some-copy.json'))).toBe(false)
   })
 
   it('refuses a file that does not exist rather than creating one', () => {
-    const missing = join(tmpdir(), 'mbs-not-there-98765.json')
+    // Unique per run, so two test processes cannot answer each other's question.
+    const missing = join(tmpdir(), `mbs-not-there-${process.pid}-${randomUUID()}.json`)
     expect(reuseIsolatedWorkspace(missing)).toBeNull()
     expect(existsSync(missing)).toBe(false)
   })
