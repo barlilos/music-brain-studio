@@ -41,7 +41,7 @@ left.
 | `pnpm typecheck`                                             | pass (exit 0) — both the Node and web projects |
 | `pnpm lint`                                                  | pass (exit 0)                                  |
 | `pnpm format:check`                                          | pass (exit 0)                                  |
-| `pnpm test`                                                  | pass (exit 0) — **142 tests, 9 files**         |
+| `pnpm test`                                                  | pass (exit 0) — **145 tests, 10 files**        |
 | `pnpm build`                                                 | pass (exit 0)                                  |
 | `pnpm dev:isolated --project-file=… --remoteDebuggingPort=…` | used for every UI check                        |
 | `node scripts/dev-desktop-isolation.mjs status`              | read-only; routing disabled at rest            |
@@ -53,9 +53,10 @@ passed Prettier unchanged.
 
 ### Test count
 
-142 across 9 files — one more than the 141 recorded in the PR description. The
-addition is the new test asserting that a disposable copy never lands inside the
-repository `data/` directory.
+145 across 10 files, against the 141 recorded in the original PR description.
+Four were added during this validation: one asserting that a disposable copy
+never lands inside the repository `data/` directory, and three pinning the
+unload decision described later in this document.
 
 | File                                                       | Tests |
 | ---------------------------------------------------------- | ----- |
@@ -68,6 +69,7 @@ repository `data/` directory.
 | `scripts/dev-isolated-workspace.test.mjs`                  | 14    |
 | `src/shared/model/bulkCapture.test.ts`                     | 6     |
 | `src/renderer/src/components/explorer/rowProgress.test.ts` | 6     |
+| `src/main/closeGuard.test.ts`                              | 3     |
 
 ### Build
 
@@ -212,15 +214,68 @@ the file changed _and_ the window closed, rather than one without the other.
 
 ## Deviations and observations
 
-1. **`window.close()` from renderer script is not guarded.** Calling
-   `window.close()` in the renderer closed a dirty window without prompting,
-   while `WM_CLOSE` — the path a user takes — was correctly intercepted. No UI
-   in the application calls `window.close()`, and a packaged build exposes no
-   console, so this is not user-reachable. Recorded as an observation, not a
-   defect, and not treated as a merge blocker.
+1. **A renderer-teardown bypass was found, traced and fixed.** See the section
+   below — it turned out to be more serious than the scripted `window.close()`
+   that first exposed it.
 2. **Canvas column overflow reproduced**, as accepted above.
 3. **The real knowledge base was never opened for writing.** Its hash was taken
    before and after every stage.
+
+## The renderer-teardown bypass (found and fixed after first acceptance)
+
+The first acceptance pass noted that a scripted `window.close()` closed a dirty
+window without prompting, and judged it harmless because nothing in the UI calls
+it. Following that thread up properly showed the observation was right and the
+judgement was wrong.
+
+**Root cause, measured rather than inferred.** With a probe attached to the main
+process's V8 inspector — no product code modified — a renderer-initiated close
+produces, in order: `webContents destroyed`, `window closed`, `app before-quit`,
+`app window-all-closed`. **`BrowserWindow`'s `close` event never fires.** That
+event is the only thing `installCloseGuard` hooks, so there is nothing to
+`preventDefault()`. The dirty flag was proven registered in the same session:
+`WM_CLOSE` on the same dirty state did raise the Save / Don't Save / Cancel
+dialog moments earlier.
+
+**Why it mattered.** The same teardown path is reached by a menu item. The
+default Electron menu is installed, and `autoHideMenuBar` only hides the bar —
+its accelerators stay live:
+
+| Menu item         | Role     | Accelerator  | Fires `close`?    |
+| ----------------- | -------- | ------------ | ----------------- |
+| Window → Close    | `close`  | `Ctrl+W`     | yes — guarded     |
+| File → Exit       | `quit`   | default      | yes — guarded     |
+| **View → Reload** | `reload` | **`Ctrl+R`** | **no — bypassed** |
+
+Confirmed against the running application: with an unsaved rename in memory,
+`Ctrl+R` discarded it in silence. The header went from `Unsaved — Save` to
+`Saved` with no prompt and no way back. One keystroke, total loss of unsaved
+work, in the milestone whose whole promise is that the knowledge base is safe.
+
+**Fix.** `beforeunload` is the one hook both paths do run. The renderer cancels
+it while the project is dirty (`WorkspaceProvider`), which reaches main as
+`will-prevent-unload`, where the reload or close is refused and the user is told
+why. The refusal is all it does: re-issuing the original action would mean
+guessing whether it was a reload or a close, and the event does not say.
+
+Electron's contract there is inverted — `preventDefault()` means _unload anyway_
+— so the safe branch is the one that does nothing. That inversion is now a named
+pure function, `decideUnload`, with three tests, because a future tidy-up of "a
+handler that ignores its event" would put the data loss straight back.
+
+**Verified against a real isolated instance, disposable data, inactive desktop:**
+
+| Path                                  | Before the fix                | After                                     |
+| ------------------------------------- | ----------------------------- | ----------------------------------------- |
+| `Ctrl+R` while dirty                  | work destroyed, no prompt     | refused; work intact; dialog explains     |
+| Scripted `window.close()` while dirty | window closed, work destroyed | refused; window survives; dialog explains |
+| `Ctrl+R` while clean                  | reloads                       | reloads (Explorer rows back to 13)        |
+| `WM_CLOSE` while dirty → Cancel       | window stays                  | window stays, file unchanged, still dirty |
+| `WM_CLOSE` while dirty → Save         | closes, file written          | closes, file written, CRLF preserved      |
+| `WM_CLOSE` while dirty → Don't Save   | closes, file unchanged        | closes, file unchanged                    |
+
+The three guarded paths behave exactly as before, so the fix adds a defence
+without disturbing the one that already worked.
 
 No step failed. Three early runs were discarded and restarted from a pristine
 copy because of faults in the _test harness_ — a mangled path, a newline that
@@ -249,6 +304,12 @@ real running application driven by real input, persistence survives a genuine
 two-process restart, a stale save is refused, all three close-guard paths behave,
 and the user's knowledge base was never touched.
 
+One real defect was found after the first acceptance pass and fixed during this
+one: `Ctrl+R` discarded unsaved work without asking. That is recorded above in
+full, with the measurement that found it and the verification that closed it.
+Finding it late is an argument for this document existing, not against merging —
+the milestone is stronger than it was when the first pass called it done.
+
 ## Remaining actions before merge
 
 1. Human review of PR #5 — it currently has no GitHub review, and the review of
@@ -259,5 +320,10 @@ and the user's knowledge base was never touched.
    merge or not at all.
 
 Not required for merge, and deliberately left for later: Canvas column overflow;
-read-only projects cannot be reloaded in-app; the renderer bundle size; and the
-unguarded scripted `window.close()` noted above.
+read-only projects cannot be reloaded in-app; and the renderer bundle size.
+
+Worth considering in a later milestone, now that the bypass is understood: the
+application ships Electron's stock menu, so `View → Reload` is offered to a user
+who has no reason to want it and every reason not to. The guard now makes it
+harmless, but a purpose-built menu would remove the question rather than answer
+it. That is a product decision, not a safety one, and it is out of scope here.
