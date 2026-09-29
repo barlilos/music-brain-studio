@@ -168,6 +168,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
     window.projectApi.setDirty(dirty)
   }, [dirty])
 
+  /*
+   * The second half of that guarantee, and it has to live here.
+   *
+   * `BrowserWindow`'s `close` event covers the title-bar button, Alt+F4,
+   * Window → Close and File → Exit. It does not fire at all for the two paths
+   * that tear down the *renderer* rather than the window: View → Reload
+   * (Ctrl+R, in the default menu and live even though the menu bar is hidden)
+   * and a script calling `window.close()`. Both were measured: the main process
+   * sees `destroyed` and then `closed`, and never gets a `close` it could
+   * cancel. Ctrl+R on a dirty project discarded every unsaved edit in silence.
+   *
+   * `beforeunload` is the only hook those paths do run. Cancelling it makes
+   * Electron emit `will-prevent-unload` in main, which is where the user is
+   * told what happened — see `closeGuard`. Cancelling is deliberately all this
+   * does: the reload or close is refused, the work stays in memory, and the
+   * user decides what to do next. Re-issuing the original action would mean
+   * guessing which of the two it was, and `will-prevent-unload` does not say.
+   */
+  useEffect(() => {
+    if (!dirty) return
+
+    const veto = (event: BeforeUnloadEvent): void => {
+      event.preventDefault()
+    }
+
+    window.addEventListener('beforeunload', veto)
+    return () => window.removeEventListener('beforeunload', veto)
+  }, [dirty])
+
   // Registered once. `runSave` reads through the ref, so it always saves the
   // current model without this effect having to re-run on every edit.
   useEffect(() => window.projectApi.onSaveRequested(runSave), [runSave])

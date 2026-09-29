@@ -18,6 +18,30 @@ import type { RequestedSaveOutcome } from '@shared/types'
 /** How long to wait for the renderer to finish a save before giving up on it. */
 const SAVE_TIMEOUT_MS = 15_000
 
+/**
+ * What to do when the renderer refuses to unload because it holds unsaved work.
+ *
+ * Pulled out as a pure function because Electron's `will-prevent-unload`
+ * contract is inverted and invites exactly the wrong reflex: there,
+ * `preventDefault()` means *discard the renderer's objection and unload
+ * anyway*, so the safe branch is the one that does nothing. A future reader
+ * tidying up "a handler that ignores its event" would reintroduce silent data
+ * loss on Ctrl+R, which is the defect this exists to close.
+ *
+ * @param isForcedClose Whether the application is already closing the window
+ *   after asking the user — in which case the objection has been answered.
+ */
+export function decideUnload(isForcedClose: boolean): {
+  /** True maps to `event.preventDefault()`. */
+  allowUnload: boolean
+  /** Whether to tell the user why nothing happened. */
+  explain: boolean
+} {
+  return isForcedClose
+    ? { allowUnload: true, explain: false }
+    : { allowUnload: false, explain: true }
+}
+
 /** Whether each window has unsaved work, by `webContents` id. */
 const dirtyWindows = new Set<number>()
 
@@ -76,6 +100,39 @@ export function installCloseGuard(window: BrowserWindow): void {
    * cannot be destroyed.
    */
   const webContentsId = window.webContents.id
+
+  /*
+   * The renderer-teardown paths: View → Reload (Ctrl+R) and a script calling
+   * `window.close()`. Neither emits `close` on the window, so the handler below
+   * never sees them; both do run `beforeunload`, which the renderer cancels
+   * while there is unsaved work.
+   *
+   * Electron's contract here reads backwards: calling `preventDefault()` means
+   * *ignore the renderer's objection and unload anyway*. Doing nothing is what
+   * honours it. So this handler deliberately does not call `preventDefault()`
+   * except while a guarded close is already in flight — at which point the
+   * renderer's objection is one we have already asked the user about.
+   */
+  window.webContents.on('will-prevent-unload', (event) => {
+    const { allowUnload, explain } = decideUnload(forcing)
+
+    if (allowUnload) {
+      event.preventDefault()
+      return
+    }
+    if (!explain) return
+
+    void dialog.showMessageBox(window, {
+      type: 'warning',
+      buttons: ['OK'],
+      defaultId: 0,
+      title: 'Unsaved changes',
+      message: 'This project has unsaved changes.',
+      detail:
+        'Reloading would discard them, so nothing was reloaded. Save with Ctrl+S first, or close the window if you want to be asked what to do.',
+      noLink: true
+    })
+  })
 
   window.on('close', (event) => {
     if (forcing || !dirtyWindows.has(webContentsId)) return
