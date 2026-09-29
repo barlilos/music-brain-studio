@@ -65,11 +65,16 @@ export interface NodeKindPresentation {
    */
   labelClassName: string
   /**
-   * Whether rows of this kind render completion state. The adapter reads
-   * completion whenever a node carries it; this decides whether it is shown, so
-   * a stray `done` on an area does not sprout a checkbox.
+   * Whether rows and cards of this kind render work state. The model reads a
+   * status whenever a node carries one; this decides whether it is shown, so a
+   * stray `active` on a domain does not sprout a checkbox.
+   *
+   * It is also what makes decision R2 invisible in the UI: the three domains
+   * whose files say `active` are `showsStatus: false`, so they display no work
+   * control and their stored word is never something the user can change by
+   * accident.
    */
-  showsCompletion: boolean
+  showsStatus: boolean
 }
 
 /** Typography shared by container-ish kinds — the things that hold other things. */
@@ -99,21 +104,21 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     Icon: GlobeIcon,
     iconClassName: 'text-indigo-500 dark:text-indigo-400',
     labelClassName: CONTAINER_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   area: {
     name: 'Area',
     Icon: FolderIcon,
     iconClassName: 'text-amber-500 dark:text-amber-400',
     labelClassName: CONTAINER_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   project: {
     name: 'Project',
     Icon: LayersIcon,
     iconClassName: 'text-violet-500 dark:text-violet-400',
     labelClassName: CONTAINER_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
 
   // ── Things that get done ──
@@ -122,21 +127,21 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     Icon: CheckboxIcon,
     iconClassName: 'text-neutral-400 dark:text-neutral-500',
     labelClassName: ITEM_LABEL,
-    showsCompletion: true
+    showsStatus: true
   },
   checklist: {
     name: 'Checklist',
     Icon: ChecklistIcon,
     iconClassName: 'text-neutral-400 dark:text-neutral-500',
     labelClassName: ITEM_LABEL,
-    showsCompletion: true
+    showsStatus: true
   },
   experiment: {
     name: 'Experiment',
     Icon: FlaskIcon,
     iconClassName: 'text-lime-600 dark:text-lime-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: true
+    showsStatus: true
   },
 
   // ── Things that get written down ──
@@ -145,35 +150,35 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     Icon: DocumentIcon,
     iconClassName: 'text-sky-500 dark:text-sky-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   playbook: {
     name: 'Playbook',
     Icon: BookIcon,
     iconClassName: 'text-cyan-600 dark:text-cyan-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   template: {
     name: 'Template',
     Icon: TemplateIcon,
     iconClassName: 'text-slate-500 dark:text-slate-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   decision: {
     name: 'Decision',
     Icon: DecisionIcon,
     iconClassName: 'text-orange-500 dark:text-orange-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   question: {
     name: 'Question',
     Icon: QuestionIcon,
     iconClassName: 'text-pink-500 dark:text-pink-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
 
   // ── Things that are kept ──
@@ -182,14 +187,14 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     Icon: BoxIcon,
     iconClassName: 'text-teal-500 dark:text-teal-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   asset: {
     name: 'Asset',
     Icon: AssetIcon,
     iconClassName: 'text-emerald-600 dark:text-emerald-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
 
   // ── Not in the schema; registered ahead of use ──
@@ -198,28 +203,28 @@ export const NODE_KINDS: Readonly<Record<string, NodeKindPresentation>> = {
     Icon: TargetIcon,
     iconClassName: 'text-rose-500 dark:text-rose-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: true
+    showsStatus: true
   },
   idea: {
     name: 'Idea',
     Icon: IdeaIcon,
     iconClassName: 'text-yellow-500 dark:text-yellow-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   reference: {
     name: 'Reference',
     Icon: LinkIcon,
     iconClassName: 'text-blue-500 dark:text-blue-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   },
   inspiration: {
     name: 'Inspiration',
     Icon: SparkleIcon,
     iconClassName: 'text-fuchsia-500 dark:text-fuchsia-400',
     labelClassName: ITEM_LABEL,
-    showsCompletion: false
+    showsStatus: false
   }
 }
 
@@ -236,7 +241,7 @@ export const UNKNOWN_KIND_PRESENTATION: NodeKindPresentation = {
   Icon: DotIcon,
   iconClassName: 'text-neutral-300 dark:text-neutral-600',
   labelClassName: ITEM_LABEL,
-  showsCompletion: false
+  showsStatus: false
 }
 
 /**

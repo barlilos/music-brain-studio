@@ -36,17 +36,29 @@ export type JsonValue =
  */
 export type ProjectDocument = JsonValue
 
-/** A project the user has opened, and where it came from. */
+/** A project the user has opened. */
 export interface Project {
   /**
-   * Absolute path of the file on disk. Unused by the UI at this milestone; it is
-   * carried so that saving does not have to re-derive it or ask the user again.
+   * An opaque handle to the file, minted by the main process when it opened it.
+   *
+   * This replaced an absolute `filePath` in milestone 005, and the change is the
+   * reason the renderer cannot cause an arbitrary write. Saving names a token,
+   * the main process looks up the path it recorded, and there is no channel that
+   * accepts a path at all. A token the main process does not know is rejected.
+   *
+   * It is also the identity the UI keys on when a different project is opened.
    */
-  filePath: string
-  /** Basename of `filePath`, for display. */
+  token: string
+  /** Basename of the file, for display. The rest of the path never leaves main. */
   fileName: string
-  /** The parsed content. Opaque outside of `TreeView` — see `ProjectDocument`. */
+  /** The parsed content. Opaque outside the codec — see `ProjectDocument`. */
   document: ProjectDocument
+  /**
+   * SHA-256 of the bytes that were read. The renderer holds it, hands it back
+   * with a save, and never interprets it — it is the token's companion for
+   * answering "is what I loaded still what is on disk".
+   */
+  diskRevision: string
 }
 
 /**
@@ -76,6 +88,44 @@ export type OpenProjectResult =
   | { status: 'canceled' }
 
 /**
+ * What the renderer sends to save.
+ *
+ * There is deliberately no path here, and no way to supply one.
+ *
+ * `expectedRevision` is the whole of the stale-overwrite protection: it is the
+ * hash of the bytes this renderer loaded, and the main process refuses to write
+ * unless the file on disk still hashes to it. A file changed by another program
+ * — or by a second window — is never silently replaced.
+ */
+export interface SaveProjectRequest {
+  projectToken: string
+  expectedRevision: string
+  /**
+   * The model revision this document was serialized from. Returned unchanged in
+   * the result so the renderer can mark *that* revision saved rather than
+   * whatever it has reached since — edits made while the write was in flight
+   * must correctly leave the project dirty.
+   */
+  modelRevision: number
+  document: ProjectDocument
+}
+
+export type SaveProjectResult =
+  | { status: 'saved'; diskRevision: string; modelRevision: number }
+  /**
+   * The file changed on disk after it was loaded. Nothing was written. The user
+   * is offered Reload or Cancel; this milestone does not merge.
+   */
+  | { status: 'conflict' }
+  /** The token is not one this process opened. Should be unreachable. */
+  | { status: 'unknownProject' }
+  /** The write itself failed, after exhausting any worthwhile retries. */
+  | { status: 'failed'; message: string }
+
+/** The outcome of the renderer saving on the main process's behalf, while closing. */
+export type RequestedSaveOutcome = 'saved' | 'failed' | 'nothingToSave'
+
+/**
  * The API the preload script exposes to the renderer. Declared here so that the
  * bridge and its consumer are checked against one definition rather than two.
  */
@@ -89,4 +139,18 @@ export interface ProjectApi {
   loadDefault: () => Promise<LoadProjectResult>
   /** Prompts for a project file, then reads and parses it. */
   open: () => Promise<OpenProjectResult>
+  /** Writes an open project back over the file it came from. */
+  save: (request: SaveProjectRequest) => Promise<SaveProjectResult>
+  /** Re-reads an open project from disk, discarding whatever was in memory. */
+  reload: (projectToken: string) => Promise<LoadProjectResult>
+  /**
+   * Tells the main process whether there is unsaved work, so that closing the
+   * window can offer to save it. Fire-and-forget.
+   */
+  setDirty: (isDirty: boolean) => void
+  /**
+   * Registers the handler the main process calls when the user chooses "Save"
+   * in the close prompt. Returns an unsubscribe function.
+   */
+  onSaveRequested: (handler: () => Promise<RequestedSaveOutcome>) => () => void
 }

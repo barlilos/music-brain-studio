@@ -13,7 +13,12 @@ export default tseslint.config(
 
   // Node.js context: main process, preload, and the build config.
   {
-    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'electron.vite.config.ts'],
+    files: [
+      'src/main/**/*.ts',
+      'src/preload/**/*.ts',
+      'electron.vite.config.ts',
+      'vitest.config.ts'
+    ],
     languageOptions: {
       globals: globals.node
     }

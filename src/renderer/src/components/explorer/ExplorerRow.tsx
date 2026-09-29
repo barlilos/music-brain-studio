@@ -11,10 +11,11 @@
  * could not look around without losing the thing they were looking at. Expansion
  * is explorer-only state; selection is shared with the canvas.
  *
- * Purely presentational otherwise: it receives a row model and two callbacks, and
- * touches neither the document, the adapter, nor the expansion set. Later
- * features extend the *row model* — a match range for search highlighting, a drag
- * handle, a context-menu target — rather than reaching into the tree's internals.
+ * Purely presentational otherwise: it receives a row model and callbacks, and
+ * touches neither the document, the model, nor the expansion set. Milestone 005
+ * added editing without changing that — the row reports that a menu was asked
+ * for and renders a field when told to, and every actual change happens through
+ * the workspace commands somewhere above it.
  *
  * It also contains no knowledge of any specific node kind. Appearance comes from
  * a single `presentationFor` lookup, so a new kind never touches this file.
@@ -24,6 +25,9 @@ import type { JSX } from 'react'
 import { presentationFor } from '@renderer/components/explorer/nodeKinds'
 import { ChevronIcon } from '@renderer/components/explorer/icons'
 import type { ExplorerRowModel } from '@renderer/components/explorer/flattenTree'
+import { InlineRename } from '@renderer/components/editing/InlineRename'
+import { rowBadgeFor } from '@renderer/components/explorer/rowProgress'
+import type { ProgressSummary } from '@shared/model/progress'
 
 /** Indentation per level, in pixels. Also the width of one indent guide. */
 const INDENT_STEP = 16
@@ -33,22 +37,36 @@ interface ExplorerRowProps {
   isSelected: boolean
   onSelect: (nodeId: string) => void
   onToggle: (nodeId: string) => void
+  /** Opens the shared context menu. Absent on a read-only project. */
+  onContextMenu?: (nodeId: string, x: number, y: number) => void
+  /** Whether this row is being renamed in place, in this surface. */
+  isRenaming?: boolean
+  onCommitRename?: (nodeId: string, title: string) => void
+  onCancelRename?: () => void
+  /** Work below this node, for the badge. */
+  progress?: ProgressSummary
 }
 
 export function ExplorerRow({
   row,
   isSelected,
   onSelect,
-  onToggle
+  onToggle,
+  onContextMenu,
+  isRenaming = false,
+  onCommitRename,
+  onCancelRename,
+  progress
 }: ExplorerRowProps): JSX.Element {
   const { node, depth, hasChildren, isExpanded } = row
   const kind = presentationFor(node.kind)
 
-  const isComplete = kind.showsCompletion && node.isComplete === true
+  const isDone = kind.showsStatus && node.status === 'done'
   // An untitled node still needs something clickable and identifiable. The kind
   // supplies it, so the row never falls back to an array index — which would be
   // the file's structure leaking back into a UI built to hide it.
   const label = node.label ?? `Untitled ${kind.name.toLowerCase()}`
+  const badge = rowBadgeFor(progress, node.children.length)
 
   return (
     <div
@@ -57,6 +75,14 @@ export function ExplorerRow({
       aria-expanded={hasChildren ? isExpanded : undefined}
       aria-selected={isSelected}
       data-node-id={node.id}
+      onContextMenu={
+        onContextMenu === undefined
+          ? undefined
+          : (event) => {
+              event.preventDefault()
+              onContextMenu(node.id, event.clientX, event.clientY)
+            }
+      }
       /*
        * `pl-2` on the row itself, not on the indent guides — so it is a margin
        * for the whole tree rather than an extra level of indentation. Every row
@@ -107,43 +133,66 @@ export function ExplorerRow({
         <span aria-hidden="true" className="h-full w-4 shrink-0" />
       )}
 
-      {/* Selecting is the row's other job, and the only one that reaches the canvas. */}
-      <button
-        type="button"
-        onClick={() => onSelect(node.id)}
-        title={label}
-        className={`flex h-full min-w-0 flex-1 items-center gap-1.5 pr-3 text-left ${
-          isSelected ? '' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800/70'
-        }`}
-      >
-        <span className={`shrink-0 ${kind.iconClassName}`}>
-          <kind.Icon isComplete={node.isComplete} />
-        </span>
-
-        <span
-          className={`truncate ${kind.labelClassName} ${
-            isComplete ? 'text-neutral-400 line-through dark:text-neutral-600' : ''
+      {isRenaming ? (
+        /*
+          Renaming replaces the label in place, in this surface, because this is
+          where the user asked for it — the same node may also be on screen in
+          the canvas, and only one of the two should sprout a field.
+        */
+        <>
+          <span className={`shrink-0 ${kind.iconClassName}`}>
+            <kind.Icon status={kind.showsStatus ? node.status : undefined} />
+          </span>
+          <InlineRename
+            initialValue={node.label ?? ''}
+            onCommit={(title) => onCommitRename?.(node.id, title)}
+            onCancel={() => onCancelRename?.()}
+            className="mr-3 h-5 min-w-0 flex-1"
+          />
+        </>
+      ) : (
+        /* Selecting is the row's other job, and the only one that reaches the canvas. */
+        <button
+          type="button"
+          onClick={() => onSelect(node.id)}
+          title={label}
+          className={`flex h-full min-w-0 flex-1 items-center gap-1.5 pr-3 text-left ${
+            isSelected ? '' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800/70'
           }`}
         >
-          {label}
-        </span>
-
-        {node.tags.length > 0 && (
-          <span className="shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-600">
-            {node.tags.join(' · ')}
+          <span className={`shrink-0 ${kind.iconClassName}`}>
+            <kind.Icon status={kind.showsStatus ? node.status : undefined} />
           </span>
-        )}
 
-        {/*
-          Pushed right, and only while collapsed: it answers "is there anything in
-          here" before you spend a click, and once expanded the answer is on screen.
-        */}
-        {hasChildren && !isExpanded && (
-          <span className="ml-auto shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-600">
-            {node.children.length}
+          <span
+            className={`truncate ${kind.labelClassName} ${
+              isDone ? 'text-neutral-400 line-through dark:text-neutral-600' : ''
+            }`}
+          >
+            {label}
           </span>
-        )}
-      </button>
+
+          {node.tags.length > 0 && (
+            <span className="shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-600">
+              {node.tags.join(' · ')}
+            </span>
+          )}
+
+          {/*
+            Pushed right, and only while collapsed: it answers "how much is left
+            in here" before you spend a click, and once expanded the answer is on
+            screen. Falls back to the child count when there is no work below.
+          */}
+          {hasChildren && !isExpanded && badge !== null && (
+            <span
+              title={badge.title}
+              className="ml-auto shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-600"
+            >
+              {badge.text}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   )
 }

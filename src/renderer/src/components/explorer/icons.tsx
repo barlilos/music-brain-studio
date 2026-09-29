@@ -11,15 +11,16 @@
  */
 
 import type { JSX } from 'react'
+import type { WorkStatus } from '@shared/model/workStatus'
 
 export interface NodeIconProps {
   className?: string
   /**
-   * Completion state of the node being drawn. Only `CheckboxIcon` varies on it;
-   * every other icon accepts and ignores it, so the registry can treat all icons
-   * as interchangeable.
+   * Work state of the node being drawn. Only `CheckboxIcon` varies on it; every
+   * other icon accepts and ignores it, so the registry can treat all icons as
+   * interchangeable.
    */
-  isComplete?: boolean | undefined
+  status?: WorkStatus | undefined
 }
 
 /** Shared frame: 16px, centred, stroked in the row's own colour. */
@@ -61,12 +62,22 @@ export function LayersIcon({ className }: NodeIconProps): JSX.Element {
   )
 }
 
-export function CheckboxIcon({ className, isComplete }: NodeIconProps): JSX.Element {
+/**
+ * The task glyph, which is also the status control.
+ *
+ * Three states, drawn so they are distinguishable at 16px and without colour:
+ * an empty box, a box with a horizontal bar, a box with a tick. In Progress is a
+ * bar rather than a half-fill because a partial fill reads as a rendering
+ * artefact at this size, and rather than a dot because a dot is what an
+ * indeterminate checkbox means in most toolkits — which this is not.
+ */
+export function CheckboxIcon({ className, status }: NodeIconProps): JSX.Element {
   return (
     <Svg className={className}>
       <g>
         <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" />
-        {isComplete === true && <path d="m5 8.25 2.25 2.25L11 5.75" />}
+        {status === 'done' && <path d="m5 8.25 2.25 2.25L11 5.75" />}
+        {status === 'in_progress' && <path d="M5 8h6" />}
       </g>
     </Svg>
   )

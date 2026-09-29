@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
-import type { LoadProjectResult, Project } from '@shared/types'
-import { toExplorerProject } from '@shared/model/adapter'
-import { indexNodes } from '@shared/model/nodeIndex'
+import { useCallback, useEffect, useState, type JSX } from 'react'
 import { ExplorerTree } from '@renderer/components/explorer/ExplorerTree'
 import { EmptyState } from '@renderer/components/explorer/EmptyState'
 import { CanvasView } from '@renderer/components/canvas/CanvasView'
 import { CanvasLocation } from '@renderer/components/canvas/CanvasLocation'
+import { WorkspaceProvider } from '@renderer/state/WorkspaceProvider'
+import { useWorkspace } from '@renderer/state/workspaceContext'
+import { EditingProvider } from '@renderer/state/EditingProvider'
+import { useEditing } from '@renderer/state/editingContext'
+import { ConfirmDiscard } from '@renderer/components/workspace/ConfirmDiscard'
+import { SaveState } from '@renderer/components/workspace/SaveState'
+import { ReadOnlyBanner } from '@renderer/components/workspace/ReadOnlyBanner'
+import { ConflictBanner } from '@renderer/components/workspace/ConflictBanner'
+import { NodeContextMenu } from '@renderer/components/editing/NodeContextMenu'
+import { AddChildDialog } from '@renderer/components/editing/AddChildDialog'
+import { BulkAddDialog } from '@renderer/components/editing/BulkAddDialog'
+import { MoveDialog } from '@renderer/components/editing/MoveDialog'
+import { Inspector } from '@renderer/components/editing/Inspector'
 
 /**
  * The whole application: open into a project, find things in the explorer, work
@@ -15,92 +25,89 @@ import { CanvasLocation } from '@renderer/components/canvas/CanvasLocation'
  * which is why the split is 25 / 75 and why selection is owned here rather than
  * by the tree — two views read it, and both may set it.
  *
- * `project.document` is still opaque here — stored, handed to the adapter, never
- * indexed or type-tested. Milestone 002 kept that discipline by letting only
- * `TreeView` look inside; the rule is unchanged, and the one module allowed to
- * look is `@shared/model/adapter`, a pure function rather than a component.
+ * Since milestone 005 the *project* is owned by `WorkspaceProvider` and the open
+ * *interaction* by `EditingProvider`. No component below sees a document, a
+ * token or a file. What stays here is what is genuinely shared view state:
+ * which node is selected. Explorer expansion stays in the tree, and the canvas
+ * root is derived rather than stored — three separate concepts, three separate
+ * owners, exactly as before.
  */
-export function App(): JSX.Element {
-  const [project, setProject] = useState<Project | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  // Starts true because the first load begins before the first paint. Without
-  // it the empty state would flash for one frame on every launch.
-  const [isLoading, setIsLoading] = useState(true)
+function Workspace(): JSX.Element {
+  const { state, projection, isDirty, isEditable, commands } = useWorkspace()
+  const editing = useEditing()
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // One pass over the file, at open time rather than on every render.
-  const explorer = useMemo(
-    () => (project === null ? null : toExplorerProject(project.document)),
-    [project]
+  // A node id addresses a node in one project. Carrying a selection into a
+  // different file would point it at something unrelated.
+  const token = state.source?.token
+  useEffect(() => {
+    setSelectedId(null)
+  }, [token])
+
+  /** Guards an action that would discard unsaved work. `null` when idle. */
+  const [pendingDiscard, setPendingDiscard] = useState<null | 'open' | 'reload'>(null)
+
+  const openProject = useCallback((): void => {
+    if (isDirty) setPendingDiscard('open')
+    else void commands.openAnotherProject()
+  }, [isDirty, commands])
+
+  const reloadProject = useCallback((): void => {
+    if (isDirty) setPendingDiscard('reload')
+    else void commands.reload()
+  }, [isDirty, commands])
+
+  // Ctrl+S / Cmd+S. The same action the header control runs, so there is one
+  // save path rather than two that can drift.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key !== 's' || !(event.ctrlKey || event.metaKey) || event.altKey) return
+      event.preventDefault()
+      void commands.save()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [commands])
+
+  const { endRename, openMenu, openDialog, closeDialog, inspect } = editing
+
+  const commitRename = useCallback(
+    (nodeId: string, title: string) => {
+      commands.rename(nodeId, title)
+      endRename()
+    },
+    [commands, endRename]
   )
 
-  // The only whole-project pass in the canvas pipeline, and the reason every
-  // other stage is O(fan-out): it buys O(1) lookups for identity and parentage.
-  // Memoized on the adapted roots, so it runs once per project rather than once
-  // per selection.
-  const index = useMemo(() => (explorer === null ? null : indexNodes(explorer.roots)), [explorer])
+  // Only offered when the project can actually be edited: a read-only file gets
+  // no menu and no rename fields rather than controls that quietly do nothing.
+  const openExplorerMenu = useCallback(
+    (nodeId: string, x: number, y: number) => openMenu({ nodeId, surface: 'explorer', x, y }),
+    [openMenu]
+  )
+  const openCanvasMenu = useCallback(
+    (nodeId: string, x: number, y: number) => openMenu({ nodeId, surface: 'canvas', x, y }),
+    [openMenu]
+  )
 
-  /**
-   * Applies any outcome that involved actually reading a file.
-   *
-   * Memoized with no dependencies — every value it closes over is a `useState`
-   * setter, and those are stable for the component's lifetime. That is what lets
-   * the effect below depend on it honestly and still run exactly once, instead
-   * of silencing the dependency rule.
-   */
-  const applyResult = useCallback((result: LoadProjectResult): void => {
-    // A node ID addresses a position in one document. Carrying a selection into
-    // a different project would point it at something unrelated.
-    setSelectedId(null)
+  // Bound to locals so TypeScript narrows them for the whole tree below; a
+  // boolean derived from them would not carry that narrowing.
+  const source = state.source
+  const content = state.content
+  const hasProject = projection !== null && source !== null
 
-    switch (result.status) {
-      case 'opened':
-        setProject(result.project)
-        setError(null)
-        return
-      case 'invalid':
-        setProject(null)
-        setError(`${result.fileName} is not valid JSON. ${result.message}`)
-        return
-      case 'failed':
-        setProject(null)
-        setError(result.message)
-        return
-    }
-  }, [])
-
-  // Open straight into the default project rather than onto a picker: the
-  // application is single-project for now and is meant to be opened daily.
-  useEffect(() => {
-    let cancelled = false
-
-    void window.projectApi.loadDefault().then((result) => {
-      // The window can be closed mid-read. Setting state on a gone component is
-      // harmless in React 19, but skipping it keeps the intent explicit.
-      if (cancelled) return
-      applyResult(result)
-      setIsLoading(false)
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [applyResult])
-
-  async function openProject(): Promise<void> {
-    const result = await window.projectApi.open()
-
-    // The user dismissed the picker. Leave whatever is on screen alone.
-    if (result.status === 'canceled') return
-
-    applyResult(result)
-  }
+  const dialog = editing.dialog
+  const parentNameOf = (parentId: string | null): string =>
+    parentId === null
+      ? (projection?.name ?? 'this project')
+      : (projection?.index.byId.get(parentId)?.label ?? 'this entry')
 
   return (
     <div className="flex h-screen flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
       <header className="flex shrink-0 items-center gap-3 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-800">
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          {project && explorer && (
+          {hasProject && (
             <>
               {/*
                 The project is named by its contents. The filename is where it
@@ -112,69 +119,175 @@ export function App(): JSX.Element {
               */}
               <h1 className="min-w-0">
                 <CanvasLocation
-                  projectName={explorer.name ?? project.fileName}
+                  projectName={projection.name ?? source.fileName}
                   isAtRoot={selectedId === null}
                   onGoToRoot={() => setSelectedId(null)}
                 />
               </h1>
               <span className="truncate text-xs text-neutral-400 dark:text-neutral-500">
-                {project.fileName}
+                {source.fileName}
               </span>
+              <SaveState />
             </>
           )}
         </div>
 
+        {hasProject && isEditable && (
+          <button
+            type="button"
+            // Adds under whatever is selected, or at the top level when nothing
+            // is — the same rule the canvas root follows.
+            onClick={() => openDialog({ kind: 'addChild', parentId: selectedId })}
+            className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-1 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            Add
+          </button>
+        )}
+
         <button
           type="button"
-          onClick={() => void openProject()}
+          onClick={openProject}
           className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-1 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
           Open Project
         </button>
       </header>
 
-      {error && (
+      {state.error && (
         <p
           role="alert"
-          className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+          className="flex shrink-0 items-start gap-3 border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
         >
-          {error}
+          <span className="min-w-0 flex-1">{state.error}</span>
+          <button
+            type="button"
+            onClick={commands.dismissError}
+            className="shrink-0 font-medium underline underline-offset-2"
+          >
+            Dismiss
+          </button>
         </p>
       )}
 
-      {explorer && index ? (
+      {state.hasConflict && <ConflictBanner onReload={reloadProject} />}
+
+      {content?.mode === 'readOnly' && <ReadOnlyBanner reason={content.reason} />}
+
+      {hasProject ? (
         // The split only appears once there is a project. Splitting the window
         // before there is anything to put in either half would advertise two
         // empty things instead of one.
         //
-        // Keyed by path so opening a different project mounts a fresh tree and a
-        // fresh canvas. Without it, expansion would carry over to a document
-        // where the same node IDs mean something else.
-        <main key={project?.filePath} className="flex min-h-0 flex-1">
+        // Keyed by token so opening a different project mounts a fresh tree and
+        // a fresh canvas. Without it, expansion would carry over to a document
+        // where the same node ids mean something else.
+        <main key={token} className="flex min-h-0 flex-1">
           {/* The tree owns its own scrolling — see the reveal effect for why. */}
           <div className="w-1/4 max-w-105 min-w-65 shrink-0 border-r border-neutral-200 dark:border-neutral-800">
             <ExplorerTree
-              roots={explorer.roots}
-              index={index}
+              roots={projection.roots}
+              index={projection.index}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              onContextMenu={isEditable ? openExplorerMenu : undefined}
+              renamingId={editing.rename?.surface === 'explorer' ? editing.rename.nodeId : null}
+              onCommitRename={commitRename}
+              onCancelRename={endRename}
+              progress={projection.progress}
             />
           </div>
 
           <div className="min-w-0 flex-1 bg-neutral-50 dark:bg-neutral-900">
             <CanvasView
-              index={index}
-              projectName={explorer.name}
+              index={projection.index}
+              projectName={projection.name}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              progress={projection.progress}
+              // Undefined on a read-only project, so the cards render no status
+              // controls and no menu rather than ones that quietly do nothing.
+              onCycleStatus={isEditable ? commands.setStatus : undefined}
+              onContextMenu={isEditable ? openCanvasMenu : undefined}
+              renamingNodeId={editing.rename?.surface === 'canvas' ? editing.rename.nodeId : null}
+              onCommitRename={commitRename}
+              onCancelRename={endRename}
             />
           </div>
+
+          {editing.inspecting !== null && (
+            <Inspector nodeId={editing.inspecting} onClose={() => inspect(null)} />
+          )}
         </main>
       ) : (
         <main className="min-h-0 flex-1 overflow-auto">
-          <EmptyState isLoading={isLoading} onOpenProject={() => void openProject()} />
+          <EmptyState isLoading={state.isLoading} onOpenProject={openProject} />
         </main>
       )}
+
+      <NodeContextMenu />
+
+      {dialog?.kind === 'addChild' && (
+        <AddChildDialog
+          parentId={dialog.parentId}
+          parentName={parentNameOf(dialog.parentId)}
+          onClose={closeDialog}
+          // Selecting what was just created is what makes capture feel like one
+          // action rather than two — and it works because identity is stable.
+          onCreated={setSelectedId}
+        />
+      )}
+
+      {dialog?.kind === 'bulkAdd' && (
+        <BulkAddDialog
+          parentId={dialog.parentId}
+          parentName={parentNameOf(dialog.parentId)}
+          onClose={closeDialog}
+          onCreated={(ids) => {
+            const first = ids[0]
+            if (first !== undefined) setSelectedId(first)
+          }}
+        />
+      )}
+
+      {dialog?.kind === 'move' && <MoveDialog nodeId={dialog.nodeId} onClose={closeDialog} />}
+
+      {pendingDiscard !== null && (
+        <ConfirmDiscard
+          action={pendingDiscard}
+          onCancel={() => setPendingDiscard(null)}
+          onSave={async () => {
+            const action = pendingDiscard
+            const persisted = await commands.save()
+
+            // Closed either way, so that a conflict or write failure is visible
+            // in the banner rather than hidden behind this dialog.
+            setPendingDiscard(null)
+
+            // The user asked to open or reload and chose to save first, so
+            // saving has to be followed by the thing they actually asked for.
+            // Only once it is genuinely on disk: a refused save must discard
+            // nothing.
+            if (persisted) {
+              void (action === 'open' ? commands.openAnotherProject() : commands.reload())
+            }
+          }}
+          onDiscard={() => {
+            const action = pendingDiscard
+            setPendingDiscard(null)
+            void (action === 'open' ? commands.openAnotherProject() : commands.reload())
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+export function App(): JSX.Element {
+  return (
+    <WorkspaceProvider>
+      <EditingProvider>
+        <Workspace />
+      </EditingProvider>
+    </WorkspaceProvider>
   )
 }

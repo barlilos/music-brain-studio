@@ -7,7 +7,14 @@
  *
  * Isomorphic on purpose: no React, no DOM, no Node. The main process will need
  * this same model for search indexing and schema validation.
+ *
+ * Since milestone 005 this is **derived from `ProjectState`** for an editable
+ * project, and from `./adapter` for a read-only one. Both produce the same shape,
+ * which is what lets the Explorer and the Canvas render either without knowing
+ * which they are looking at.
  */
+
+import type { WorkStatus } from '@shared/model/workStatus'
 
 /**
  * What kind of thing a node is — an area, a project, a task, and so on.
@@ -52,11 +59,15 @@ export interface ExplorerNode {
   /** See `NodeKind`. Never empty; unrecognised values are legal and expected. */
   kind: NodeKind
   /**
-   * Completion state, for kinds that have one. `undefined` means the node said
-   * nothing about it, which is different from `false` — the UI shows a checkbox
-   * only when the node actually carries the concept.
+   * Work state, for kinds that have one. `undefined` means the node said nothing
+   * this application recognises, which is different from Todo — the UI shows a
+   * status control only when the node actually carries the concept.
+   *
+   * Already interpreted: a file spelling `active` arrives here as `in_progress`.
+   * What goes back to disk is decided by `ProjectNode.persistedStatus`, not here,
+   * so a projection can never cause a write.
    */
-  isComplete: boolean | undefined
+  status: WorkStatus | undefined
   /** Free-text labels, already filtered to non-empty strings. Possibly empty. */
   tags: string[]
   /** Child nodes, already adapted. Empty for leaves. */

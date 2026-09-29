@@ -7,3 +7,9 @@ pnpm-lock.yaml
 # whatever writes it, and reformatting it here would produce a large diff
 # that says nothing about the code.
 data
+
+# A historical source document, reconstructed from a planning conversation that
+# no longer exists, and preserved byte-for-byte as evidence. Reformatting it
+# would edit the record. This one file only — later handoffs are ordinary
+# documents and should be formatted.
+docs/handoffs/000-product-vision-and-roadmap-history.md

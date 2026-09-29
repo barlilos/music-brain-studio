@@ -38,6 +38,37 @@ export const IPC_OPEN_PROJECT = 'project:open'
 export const IPC_LOAD_DEFAULT_PROJECT = 'project:loadDefault'
 
 /**
+ * IPC channel for writing an open project back to disk.
+ *
+ * Takes a token rather than a path — see `SaveProjectRequest`. The renderer has
+ * never been able to name a file for `readFile`, and this keeps that true for
+ * `writeFile`, which matters considerably more.
+ */
+export const IPC_SAVE_PROJECT = 'project:save'
+
+/** IPC channel for re-reading an open project, after a conflict. */
+export const IPC_RELOAD_PROJECT = 'project:reload'
+
+/**
+ * IPC channel the renderer uses to tell the main process whether there is
+ * unsaved work.
+ *
+ * One-way and fire-and-forget. The main process needs it because only it can
+ * intercept a window close, and it cannot ask the renderer synchronously at the
+ * moment the close arrives.
+ */
+export const IPC_SET_DIRTY = 'project:setDirty'
+
+/**
+ * IPC channel the main process uses to ask the renderer to save, having offered
+ * the user Save / Don't Save / Cancel while closing a dirty window.
+ */
+export const IPC_REQUEST_SAVE = 'project:requestSave'
+
+/** IPC channel the renderer answers `IPC_REQUEST_SAVE` on. */
+export const IPC_SAVE_REQUEST_RESULT = 'project:requestSaveResult'
+
+/**
  * The workspace opened at startup, relative to the application root.
  *
  * **A development convenience, not intended product behaviour.** The
@@ -56,6 +87,23 @@ export const IPC_LOAD_DEFAULT_PROJECT = 'project:loadDefault'
  * path and never a location.
  */
 export const DEFAULT_PROJECT_PATH = 'data/music-brain.json'
+
+/**
+ * Environment variable naming a development-only replacement for the default
+ * project.
+ *
+ * Set by `pnpm dev:isolated` to a disposable copy in the system temp directory,
+ * so that a development session can add, rename, move and save without any of it
+ * reaching the real knowledge base. `pnpm dev` never sets it.
+ *
+ * **Must match `DEV_PROJECT_FILE_ENV` in `scripts/dev-isolated-workspace.mjs`.**
+ * The launcher is plain ESM and cannot import this file.
+ *
+ * Honoured only when `app.isPackaged` is false, so it cannot be used to redirect
+ * a shipped application. It is read in the main process and never travels to the
+ * renderer, which has no field to carry a path in the first place.
+ */
+export const DEV_PROJECT_FILE_ENV = 'MUSIC_BRAIN_DEV_PROJECT_FILE'
 
 /** The `window` property the preload script publishes its project API on. */
 export const PROJECT_API_NAMESPACE = 'projectApi'

@@ -1,0 +1,201 @@
+/**
+ * The details of one node — the five fields milestone 005 lets you edit.
+ *
+ * `title`, `nodeType`, `status`, `tags`, `notes`. Nothing else, and the
+ * exclusions are deliberate rather than pending:
+ *
+ * `priority` exists on 539 nodes of the reference file and its value is `3` on
+ * every single one. It is a generator artefact, not a workflow, and putting it
+ * on screen would invite someone to curate a field nothing reads.
+ *
+ * `related`, `dependsOn`, `resources`, `outputs`, `energy`, `taskType` and
+ * `successCriteria` are preserved through every save and shown nowhere. Relations
+ * need a picker and a graph surface, which is a milestone of its own.
+ *
+ * Each field routes to the command that owns it — title/tags/notes through
+ * `updateDetails`, type through `changeType`, status through `setStatus`. That
+ * split is not cosmetic: it is what stops editing a title from canonicalising a
+ * status the user never touched (decision R2).
+ */
+
+import { useEffect, useState, type JSX } from 'react'
+import type { NodeId } from '@shared/model/project'
+import { WORK_STATUSES } from '@shared/model/workStatus'
+import { useCommands, useWorkspace } from '@renderer/state/workspaceContext'
+import { presentationFor } from '@renderer/components/explorer/nodeKinds'
+import { NODE_KIND_OPTIONS } from '@renderer/components/editing/nodeKindOptions'
+import { WORK_STATUS_LABELS } from '@renderer/components/editing/workStatusLabels'
+
+interface InspectorProps {
+  nodeId: NodeId
+  onClose: () => void
+}
+
+function FieldLabel({ children }: { children: string }): JSX.Element {
+  return (
+    <span className="mb-1 block text-xs text-neutral-500 dark:text-neutral-400">{children}</span>
+  )
+}
+
+const FIELD_CLASS =
+  'w-full rounded-md border border-neutral-300 px-2 py-1 text-sm outline-none focus:border-indigo-400 dark:border-neutral-600 dark:bg-neutral-900'
+
+export function Inspector({ nodeId, onClose }: InspectorProps): JSX.Element | null {
+  const { projection, state } = useWorkspace()
+  const commands = useCommands()
+
+  const node = projection?.index.byId.get(nodeId)
+  // `notes` is detail rather than something the tree renders, so it is not on
+  // `ExplorerNode`. This is the one view that needs the model itself.
+  const model = state.content?.mode === 'editable' ? state.content.state : null
+  const modelNode = model?.nodesById.get(nodeId)
+
+  /*
+   * Text fields are held locally while they are being typed in and committed on
+   * blur, rather than dispatching a command per keystroke.
+   *
+   * Every keystroke would be its own revision, which would make the project
+   * dirty character by character and — once undo exists — put fifty undo steps
+   * inside one sentence. Selects commit immediately, because choosing from a
+   * list is already a deliberate single act.
+   */
+  const [title, setTitle] = useState('')
+  const [tags, setTags] = useState('')
+  const [notes, setNotes] = useState('')
+
+  /*
+   * Re-seeded whenever a different node is inspected, or this node's stored
+   * values change — which happens after each committed edit, since the model is
+   * rebuilt. Typing does not trigger it, because typing changes only local
+   * state.
+   */
+  useEffect(() => {
+    if (modelNode === undefined) return
+    setTitle(modelNode.title)
+    setTags(modelNode.tags.join(', '))
+    setNotes(modelNode.notes)
+  }, [nodeId, modelNode])
+
+  if (node === undefined || modelNode === undefined) return null
+
+  const carriesStatus = presentationFor(node.kind).showsStatus
+
+  return (
+    <aside
+      aria-label="Details"
+      className="flex w-80 shrink-0 flex-col overflow-auto border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
+        <h2 className="text-sm font-medium">Details</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close details"
+          className="rounded-sm px-1.5 text-sm text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="space-y-3 p-3">
+        <label className="block">
+          <FieldLabel>Title</FieldLabel>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => {
+              const next = title.trim()
+              if (next.length > 0 && next !== modelNode.title) commands.rename(nodeId, next)
+              else setTitle(modelNode.title)
+            }}
+            className={FIELD_CLASS}
+          />
+        </label>
+
+        <label className="block">
+          <FieldLabel>Type</FieldLabel>
+          <select
+            value={node.kind}
+            onChange={(event) => commands.changeType(nodeId, event.target.value)}
+            className={FIELD_CLASS}
+          >
+            {/*
+              A kind the file uses but the registry does not know still has to be
+              selectable, or opening this panel would silently retype the node.
+            */}
+            {NODE_KIND_OPTIONS.some((option) => option.kind === node.kind) ? null : (
+              <option value={node.kind}>{node.kind}</option>
+            )}
+            {NODE_KIND_OPTIONS.map((option) => (
+              <option key={option.kind} value={option.kind}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {carriesStatus && (
+          <label className="block">
+            <FieldLabel>Status</FieldLabel>
+            <select
+              value={node.status ?? ''}
+              onChange={(event) => {
+                const value = event.target.value
+                if (value !== '')
+                  commands.setStatus(nodeId, value as (typeof WORK_STATUSES)[number])
+              }}
+              className={FIELD_CLASS}
+            >
+              {/*
+                A node whose file says nothing about status, or says something
+                this build does not recognise, shows an empty option until the
+                user chooses — picking one is what canonicalises it (R2).
+              */}
+              {node.status === undefined && <option value="">—</option>}
+              {WORK_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {WORK_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label className="block">
+          <FieldLabel>Tags</FieldLabel>
+          <input
+            value={tags}
+            onChange={(event) => setTags(event.target.value)}
+            onBlur={() => {
+              const next = tags
+                .split(',')
+                .map((tag) => tag.trim())
+                .filter((tag) => tag.length > 0)
+              // Element-wise, so a tag containing a separator cannot make two
+              // different lists compare equal.
+              const unchanged =
+                next.length === modelNode.tags.length &&
+                next.every((tag, index) => tag === modelNode.tags[index])
+              if (!unchanged) commands.updateDetails(nodeId, { tags: next })
+            }}
+            placeholder="Comma separated"
+            className={FIELD_CLASS}
+          />
+        </label>
+
+        <label className="block">
+          <FieldLabel>Notes</FieldLabel>
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            onBlur={() => {
+              if (notes !== modelNode.notes) commands.updateDetails(nodeId, { notes })
+            }}
+            rows={8}
+            className={`${FIELD_CLASS} resize-y`}
+          />
+        </label>
+      </div>
+    </aside>
+  )
+}
