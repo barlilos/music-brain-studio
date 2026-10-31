@@ -1,0 +1,14 @@
+# This repository is developed on Windows with `core.autocrlf=true`, so text
+# files are stored with LF and checked out with CRLF. That is the right default
+# here and is deliberately left alone: `.prettierrc.json` already sets
+# `endOfLine: "auto"` so formatting agrees with it, and `data/music-brain.json`
+# relies on the application reproducing whatever convention a file arrived with.
+#
+# One file is exempt. The product-vision handoff is a historical source rather
+# than a document we maintain — the conversations it reconstructs were deleted,
+# and it is cited by SHA-256 in `docs/validation/`. Checking it out as CRLF
+# would change those bytes and break every citation, so it keeps LF everywhere.
+#
+# Scoped to this exact path on purpose. Later handoffs are ordinary documents
+# and should follow the repository default.
+docs/handoffs/000-product-vision-and-roadmap-history.md text eol=lf

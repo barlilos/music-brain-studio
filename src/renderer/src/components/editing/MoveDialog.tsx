@@ -1,0 +1,157 @@
+/**
+ * Re-file a node somewhere else.
+ *
+ * A searchable flat list rather than an expandable tree. The reference knowledge
+ * base is 548 nodes and five levels deep, and the question being answered is
+ * "where does this belong", which people answer by name rather than by
+ * navigating. Each row shows its ancestry, so two areas called `Mixing` are
+ * still tellable apart.
+ *
+ * **The node itself and everything inside it are excluded from the list.** The
+ * mutation layer rejects those moves anyway — filing a node inside its own
+ * descendant would detach the whole branch — but an option that produces an
+ * error banner when clicked is a worse experience than an option that is not
+ * offered. The rule is enforced in both places on purpose: the model refuses
+ * because it must, and the picker hides because it should.
+ */
+
+import { useMemo, useState, type JSX } from 'react'
+import { subtreeIds, type NodeId } from '@shared/model/project'
+import { useCommands, useWorkspace } from '@renderer/state/workspaceContext'
+import { presentationFor } from '@renderer/components/explorer/nodeKinds'
+import { Dialog, DialogButton } from '@renderer/components/editing/Dialog'
+
+interface MoveDialogProps {
+  nodeId: NodeId
+  onClose: () => void
+}
+
+/** React key for the project-root row, which has no node id of its own. */
+const PROJECT_ROOT_KEY = '__project_root__'
+
+interface Destination {
+  id: NodeId | null
+  label: string
+  /** Ancestor titles, outermost first, so duplicates are distinguishable. */
+  path: string
+  kindName: string
+}
+
+export function MoveDialog({ nodeId, onClose }: MoveDialogProps): JSX.Element | null {
+  const { state, projection } = useWorkspace()
+  const commands = useCommands()
+  const [query, setQuery] = useState('')
+
+  const model = state.content?.mode === 'editable' ? state.content.state : null
+  const node = projection?.index.byId.get(nodeId)
+
+  const destinations = useMemo((): Destination[] => {
+    if (model === null || projection === null) return []
+
+    // Self plus descendants: the exact set that cannot receive this node.
+    const excluded = new Set(subtreeIds(model, nodeId))
+    const currentParentId = model.nodesById.get(nodeId)?.parentId ?? null
+
+    const list: Destination[] = []
+
+    // The project root is an ordinary destination, which is what makes "move
+    // this to the top level" the same operation as any other move.
+    if (currentParentId !== null) {
+      list.push({
+        id: null,
+        label: projection.name ?? 'Project root',
+        path: '',
+        kindName: 'Top level'
+      })
+    }
+
+    const walk = (ids: readonly NodeId[], ancestors: string[]): void => {
+      for (const id of ids) {
+        const candidate = model.nodesById.get(id)
+        if (candidate === undefined) continue
+
+        const title = candidate.title.length > 0 ? candidate.title : 'Untitled'
+
+        if (!excluded.has(id) && id !== currentParentId) {
+          list.push({
+            id,
+            label: title,
+            path: ancestors.join(' › '),
+            kindName: presentationFor(candidate.kind).name
+          })
+        }
+
+        // Descend even into excluded nodes' siblings; only the subtree of the
+        // moved node itself is skipped entirely.
+        if (!excluded.has(id)) walk(candidate.childIds, [...ancestors, title])
+      }
+    }
+
+    walk(model.rootIds, [])
+    return list
+  }, [model, projection, nodeId])
+
+  const matches = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (needle.length === 0) return destinations.slice(0, 200)
+
+    return destinations
+      .filter(
+        (destination) =>
+          destination.label.toLowerCase().includes(needle) ||
+          destination.path.toLowerCase().includes(needle)
+      )
+      .slice(0, 200)
+  }, [destinations, query])
+
+  if (node === undefined || model === null) return null
+
+  function moveTo(destinationId: NodeId | null): void {
+    commands.move(nodeId, destinationId)
+    onClose()
+  }
+
+  return (
+    <Dialog
+      wide
+      title={`Move ${node.label ?? 'entry'}`}
+      onClose={onClose}
+      footer={<DialogButton onClick={onClose}>Cancel</DialogButton>}
+    >
+      <input
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Search destinations"
+        aria-label="Search destinations"
+        className="mb-2 w-full rounded-md border border-neutral-300 px-2 py-1 text-sm outline-none focus:border-indigo-400 dark:border-neutral-600 dark:bg-neutral-900"
+      />
+
+      {matches.length === 0 ? (
+        <p className="px-1 py-3 text-sm text-neutral-500 dark:text-neutral-400">
+          Nothing matches. Entries inside {node.label ?? 'this one'} cannot hold it.
+        </p>
+      ) : (
+        <ul className="max-h-80 space-y-0.5 overflow-auto">
+          {matches.map((destination) => (
+            <li key={destination.id ?? PROJECT_ROOT_KEY}>
+              <button
+                type="button"
+                onClick={() => moveTo(destination.id)}
+                className="block w-full rounded-sm px-2 py-1 text-left hover:bg-neutral-100 dark:hover:bg-neutral-700"
+              >
+                <span className="block truncate text-sm text-neutral-800 dark:text-neutral-100">
+                  {destination.label}
+                </span>
+                <span className="block truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+                  {destination.path.length > 0
+                    ? `${destination.kindName} · ${destination.path}`
+                    : destination.kindName}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Dialog>
+  )
+}

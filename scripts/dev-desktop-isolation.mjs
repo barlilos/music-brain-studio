@@ -6,11 +6,19 @@
  *
  *   pnpm dev            disables routing, then launches. Always opens on the
  *                       desktop you are looking at, even if an earlier
- *                       isolated run left the flag behind.
+ *                       isolated run left the flag behind, and always against
+ *                       the real knowledge base.
  *   pnpm dev:isolated   picks a desktop that is never the active one, enables
- *                       routing, then launches. Refuses to launch if it cannot,
- *                       because an unrouted window landing on the user's
- *                       desktop is the exact outcome this exists to prevent.
+ *                       routing, gives the app a disposable copy of the data
+ *                       file, then launches. Refuses to launch if it cannot
+ *                       find a safe desktop, because an unrouted window landing
+ *                       on the user's desktop is the exact outcome this exists
+ *                       to prevent.
+ *
+ * Since milestone 005 the isolation is twofold: the *desktop* the window opens
+ * on, and the *file* it can write to. The second matters more — a window on the
+ * wrong desktop is an annoyance, while a save against the real file is data
+ * loss. See `./dev-isolated-workspace.mjs`.
  *
  * Target selection is dynamic. The preferred target is the desktop holding this
  * project's own VS Code window, so the app follows the workspace when it moves;
@@ -26,12 +34,21 @@
  * Nothing here is imported by the application, and `electron-builder.yml` ships
  * only `out/**` and `package.json`, so none of it reaches a build.
  *
- * Usage: node scripts/dev-desktop-isolation.mjs <run|off|status>
+ * Usage: node scripts/dev-desktop-isolation.mjs <run|off|status> [args]
+ *
+ * Extra arguments go to electron-vite, except `--project-file=<path>`, which this
+ * script consumes to reuse a disposable project rather than copying a fresh one.
  */
 
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import {
+  DEV_PROJECT_FILE_ENV,
+  createIsolatedWorkspace,
+  disposeIsolatedWorkspace,
+  reuseIsolatedWorkspace
+} from './dev-isolated-workspace.mjs'
 import {
   DLL_PATH,
   SetupError,
@@ -55,6 +72,21 @@ const STATUS_FILE = STATE_DIR ? join(STATE_DIR, 'watcher.status') : null
 const REQUEST_FILE = STATE_DIR ? join(STATE_DIR, 'target.request') : null
 
 const ELECTRON_VITE = join('node_modules', 'electron-vite', 'bin', 'electron-vite.js')
+
+/**
+ * Reuse an existing disposable project file instead of copying a fresh one.
+ *
+ * Development-only and heavily fenced — see `reuseIsolatedWorkspace`. It exists
+ * so persistence across two real Electron processes can be verified without ever
+ * reaching for `pnpm dev`.
+ */
+const PROJECT_FILE_FLAG = '--project-file'
+
+/** The path asked for on the command line, or `null` when none was. */
+function requestedProjectFile() {
+  const arg = process.argv.slice(3).find((a) => a.startsWith(`${PROJECT_FILE_FLAG}=`))
+  return arg === undefined ? null : arg.slice(PROJECT_FILE_FLAG.length + 1)
+}
 
 /** A status file older than this means the watcher is gone, not merely quiet. */
 const STALE_AFTER_SECONDS = 10
@@ -419,9 +451,11 @@ async function prepareIsolation() {
  * Runs the dev server as a child so routing can be switched off again when it
  * stops. Cleanup is best-effort by design: `pnpm dev` disables routing itself,
  * so a missed cleanup here — a hard kill, a closed terminal, a power cut — can
- * never affect a later manual launch.
+ * never affect a later manual launch. A leftover temp copy is likewise harmless.
+ *
+ * @param {{ disableRoutingOnExit: boolean, isolateData: boolean }} options
  */
-function launchDevServer({ disableRoutingOnExit }) {
+function launchDevServer({ disableRoutingOnExit, isolateData }) {
   // VS Code's extension host exports ELECTRON_RUN_AS_NODE=1 to its children,
   // which makes any Electron binary boot as plain Node and die on
   // `app.whenReady()`. This command is the one an agent runs from inside that
@@ -429,12 +463,77 @@ function launchDevServer({ disableRoutingOnExit }) {
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
 
-  const child = spawn(process.execPath, [ELECTRON_VITE, 'dev'], { stdio: 'inherit', env })
+  // Never inherited: a stale value from an earlier isolated run must not decide
+  // which file a later `pnpm dev` opens.
+  delete env[DEV_PROJECT_FILE_ENV]
+
+  /*
+   * Two ways to get a writable project, and only one of them is the norm.
+   *
+   * Without the flag: a fresh disposable copy, as always. With it: reuse a file
+   * the caller prepared, which is what makes "save in one process, reopen in the
+   * next" verifiable at all. The reuse path refuses the real knowledge base and
+   * anything inside `data/`, and refuses to invent a file that is not there.
+   */
+  const requested = requestedProjectFile()
+  const workspace = !isolateData
+    ? null
+    : requested !== null
+      ? reuseIsolatedWorkspace(requested)
+      : createIsolatedWorkspace()
+
+  if (isolateData && requested !== null && workspace === null) {
+    fail(`${PROJECT_FILE_FLAG} was refused: ${requested}`, [
+      'it must be an existing file',
+      'it must not be data/music-brain.json',
+      'it must not live inside the repository data directory'
+    ])
+  }
+
+  if (workspace?.reused) {
+    env[DEV_PROJECT_FILE_ENV] = workspace.projectPath
+    log(`Data: ISOLATED COPY (reused) — ${workspace.projectPath}`)
+    log('The real knowledge base is untouched; this file belongs to whoever made it.')
+  } else if (workspace) {
+    env[DEV_PROJECT_FILE_ENV] = workspace.projectPath
+    log(`Data: ISOLATED COPY — the app may write freely; ${workspace.sourcePath} is untouched.`)
+  } else if (isolateData) {
+    log('Data: REAL FILE — no isolated copy could be made. Saving will write to it.')
+  } else {
+    log('Data: REAL FILE.')
+  }
+
+  /*
+   * Anything after the command is handed to electron-vite untouched, so an
+   * isolated run can be driven by a debugger:
+   *
+   *   pnpm dev:isolated -- --remoteDebuggingPort=9222
+   *
+   * This exists so that verifying the UI never needs `pnpm dev`. Without it the
+   * only way to attach to a renderer would be the command that deliberately
+   * opens on the user's active desktop and against the real knowledge base,
+   * which are the two things this launcher exists to prevent.
+   */
+  // The leading `--` is pnpm's separator, not an argument. Forwarding it would
+  // make electron-vite treat everything after it as positional and silently
+  // ignore the flags.
+  const passThrough = process.argv
+    .slice(3)
+    .filter((arg, index) => !(index === 0 && arg === '--'))
+    // `--project-file` is this launcher's own, not electron-vite's.
+    .filter((arg) => !arg.startsWith(`${PROJECT_FILE_FLAG}=`))
+  if (passThrough.length > 0) log(`Passing to electron-vite: ${passThrough.join(' ')}`)
+
+  const child = spawn(process.execPath, [ELECTRON_VITE, 'dev', ...passThrough], {
+    stdio: 'inherit',
+    env
+  })
 
   let cleanedUp = false
   const cleanUp = () => {
     if (cleanedUp) return
     cleanedUp = true
+    disposeIsolatedWorkspace(workspace)
     if (disableRoutingOnExit) {
       setRouting(false)
       log('Routing disabled.')
@@ -468,7 +567,9 @@ if (process.platform !== 'win32' || !FLAG_FILE) {
   // Nothing to protect: there are no Windows virtual desktops here.
   if (command === 'run') {
     log('Not Windows — launching without desktop routing.')
-    launchDevServer({ disableRoutingOnExit: false })
+    // Data isolation is not Windows-specific and is the half that protects the
+    // knowledge base, so it still applies here.
+    launchDevServer({ disableRoutingOnExit: false, isolateData: true })
   } else {
     log('Windows-only; nothing to do.')
   }
@@ -476,7 +577,7 @@ if (process.platform !== 'win32' || !FLAG_FILE) {
   switch (command) {
     case 'run': {
       await prepareIsolation()
-      launchDevServer({ disableRoutingOnExit: true })
+      launchDevServer({ disableRoutingOnExit: true, isolateData: true })
       break
     }
 

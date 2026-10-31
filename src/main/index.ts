@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { APP_NAME, DEFAULT_WINDOW_SIZE, MIN_WINDOW_SIZE } from '@shared/constants'
 import { registerProjectIpc } from '@main/ipc/project'
+import { installCloseGuard } from '@main/closeGuard'
 
 /**
  * Injected by electron-vite while the dev server is running. Absent in a
@@ -48,6 +49,10 @@ function createMainWindow(): void {
   window.once('ready-to-show', () => {
     window.show()
   })
+
+  // Installed before the page loads, so a project cannot become dirty before
+  // anything is watching for it.
+  installCloseGuard(window)
 
   if (RENDERER_DEV_URL) {
     void window.loadURL(RENDERER_DEV_URL)

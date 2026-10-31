@@ -22,6 +22,8 @@
  * structure. Pure, and free of both React and React Flow.
  */
 
+import type { WorkStatus } from '@shared/model/workStatus'
+import { hasKnownWork, type ProgressIndex, type ProgressSummary } from '@shared/model/progress'
 import { presentationFor, type NodeKindPresentation } from '@renderer/components/explorer/nodeKinds'
 import {
   CARD_HEIGHT,
@@ -39,11 +41,25 @@ export interface CanvasCardView {
   height: number
   /** Already resolved: the placeholder has been applied, so never `undefined`. */
   title: string
+  /**
+   * The name as the user actually wrote it, or `undefined` for an untitled node.
+   *
+   * Carried alongside `title` for one reason: a rename field must start from
+   * what the user typed, not from the placeholder we substituted. Seeding it
+   * with "Untitled task" would turn cancelling into a rename.
+   */
+  label: string | undefined
   /** The registry entry, looked up once. No consumer resolves a kind again. */
   presentation: NodeKindPresentation
-  /** Whether to draw completion at all, and what to draw. Both pre-decided. */
-  showsCompletion: boolean
-  isComplete: boolean | undefined
+  /** Whether to draw work state at all, and what to draw. Both pre-decided. */
+  showsStatus: boolean
+  status: WorkStatus | undefined
+  /**
+   * The line under the title: the kind, and the work inside this node when
+   * there is any. Resolved here so the card renders a string and makes no
+   * decision of its own.
+   */
+  subtitle: string
   isFocused: boolean
   /** False for the project card, which stands for nothing selectable. */
   isNavigable: boolean
@@ -60,9 +76,10 @@ export interface CanvasViewModel {
   connections: CanvasConnectionView[]
 }
 
-export function toCanvasViewModel(layout: CanvasLayout): CanvasViewModel {
+export function toCanvasViewModel(layout: CanvasLayout, progress?: ProgressIndex): CanvasViewModel {
   const cards = layout.placements.map(({ card, x, y }): CanvasCardView => {
     const presentation = presentationFor(card.kind)
+    const summary = card.nodeId === null ? progress?.total : progress?.byId.get(card.nodeId)
 
     return {
       id: card.id,
@@ -75,11 +92,14 @@ export function toCanvasViewModel(layout: CanvasLayout): CanvasViewModel {
       // supplies it — the same placeholder the explorer row uses, because the
       // two views must never call one node by two names.
       title: card.label ?? `Untitled ${presentation.name.toLowerCase()}`,
+      label: card.label,
       presentation,
-      // The registry decides whether a kind carries completion; the node decides
-      // whether it said anything. A stray `done` on an area sprouts no checkbox.
-      showsCompletion: presentation.showsCompletion && card.isComplete !== undefined,
-      isComplete: card.isComplete,
+      // The registry alone decides this: a stray `active` on a domain sprouts no
+      // checkbox, and a task whose file says nothing about status still gets one
+      // — that control is how the user gives it a state in the first place.
+      showsStatus: presentation.showsStatus,
+      status: card.status,
+      subtitle: describeProgress(presentation.name, summary),
       isFocused: card.id === layout.focusedId,
       isNavigable: card.nodeId !== null
     }
@@ -92,4 +112,25 @@ export function toCanvasViewModel(layout: CanvasLayout): CanvasViewModel {
   }))
 
   return { cards, connections }
+}
+
+/**
+ * The card's second line: what kind of thing it is, and what is left to do
+ * inside it.
+ *
+ * **Counts, never a percentage.** With the reference file the project card reads
+ * `397 open`, and a percentage there would say 0% and then *fall* every time the
+ * user writes down another task — punishing the exact behaviour the application
+ * exists to encourage. Restraint is also why finished work is only mentioned
+ * once some exists, and why a node with nothing inside it just says what it is.
+ */
+function describeProgress(kindName: string, summary: ProgressSummary | undefined): string {
+  if (summary === undefined || !hasKnownWork(summary)) return kindName
+
+  const parts: string[] = []
+  if (summary.todo > 0) parts.push(`${summary.todo} open`)
+  if (summary.inProgress > 0) parts.push(`${summary.inProgress} in progress`)
+  if (summary.done > 0) parts.push(`${summary.done} done`)
+
+  return `${kindName} · ${parts.join(' · ')}`
 }

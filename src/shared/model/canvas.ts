@@ -13,6 +13,7 @@
 
 import type { NodeIndex } from '@shared/model/nodeIndex'
 import type { ExplorerNode, NodeKind } from '@shared/model/node'
+import type { WorkStatus } from '@shared/model/workStatus'
 
 /**
  * What a canvas is anchored on — its identity.
@@ -90,7 +91,7 @@ export interface CanvasCard {
    */
   label: string | undefined
   kind: NodeKind
-  isComplete: boolean | undefined
+  status: WorkStatus | undefined
   role: 'root' | 'child'
 }
 
@@ -134,7 +135,7 @@ function toCard(node: ExplorerNode, role: CanvasCard['role']): CanvasCard {
     nodeId: node.id,
     label: node.label,
     kind: node.kind,
-    isComplete: node.isComplete,
+    status: node.status,
     role
   }
 }
@@ -169,7 +170,7 @@ export function buildCanvasGraph(
           nodeId: null,
           label: projectName,
           kind: PROJECT_CARD_KIND,
-          isComplete: undefined,
+          status: undefined,
           role: 'root'
         }
       : toCard(rootNode, 'root')
