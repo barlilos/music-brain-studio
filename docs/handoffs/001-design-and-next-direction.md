@@ -160,9 +160,31 @@ one.
 
 A packaged Windows executable, a visible version, release notes, and a documented update
 process that **preserves user data**. Automatic updates are explicitly _not_ a prerequisite.
-`electron-builder` is already configured and `package:win` already exists, so the gap is
-versioning, data migration-safety across versions, and the release ritual — not packaging
-machinery.
+`electron-builder` is already configured and `package:win` already exists, so the packaging
+machinery is not the gap.
+
+**The gap is where a packaged application keeps its data, and today the answer is wrong.**
+Traced at `89e5a60`, not assumed:
+
+- `electron-builder.yml` ships `data/` as `extraResources`, so a build embeds a **snapshot
+  copy** of `data/music-brain.json`;
+- `defaultProjectPath()` in `src/main/ipc/project.ts` resolves the default under
+  `process.resourcesPath` when `app.isPackaged`;
+- so an installed application auto-opens **its own bundled copy**, and `Ctrl+S` writes back
+  into the installation directory — typically not writable for a per-machine NSIS install,
+  and if it ever is, silently the wrong file while the user's real knowledge base sits
+  untouched;
+- and the next installed version replaces that file, destroying anything saved into it.
+
+`package:win` has never been run — there is no `release/` directory — so none of this has
+been observed, only traced. It is not a milestone-005 regression and it blocks nothing that
+exists today; it blocks **this** goal specifically.
+
+What it implies for design: a packaged release needs a real answer to _where the user's
+knowledge base lives_ — a user-data location outside the installation, the workspace and
+recent-projects UI the README has promised since milestone 002, and a migration story
+across versions. That is product design, not build configuration, which is the argument for
+settling it in the design pass rather than discovering it on the first install.
 
 ### 5.6 Supporting materials (later)
 
