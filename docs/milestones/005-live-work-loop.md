@@ -1,7 +1,11 @@
 # 005 — Live Work Loop
 
 **Branch:** `feature/live-work-loop`
-**Status:** implemented — awaiting review
+**Status:** implemented — accepted 2026-10-31 as the **editing foundation**, not as a
+finished daily-use experience. See
+[the acceptance record](../validation/005-live-work-loop-final-acceptance.md#human-acceptance--2026-10-31)
+for the exact scope, the usability findings reported alongside it, and the limitations
+carried forward.
 
 ## Goal
 

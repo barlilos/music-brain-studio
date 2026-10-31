@@ -3,10 +3,17 @@
 Desktop application for managing a hierarchical JSON knowledge base for music projects,
 research, tasks and creative workflows.
 
-> **Status: early.** The app opens into a two-pane workspace: an Explorer tree for finding
-> things, and a Canvas that shows the selected node and its immediate children as a graph.
-> **The Canvas is the primary workspace; the Explorer is a navigation aid.** There is no
-> editing, saving or search yet — the Canvas is read-only.
+> **Status: early, but writable.** The app opens into a two-pane workspace: an Explorer
+> tree for finding things, and a Canvas that shows the selected node and its immediate
+> children as a graph. **The Canvas is the primary workspace; the Explorer is a navigation
+> aid.**
+>
+> Since milestone 005 the project can be **edited and saved**: add, bulk-add, rename,
+> change type, move, and set Todo / In progress / Done, with recursive work counts, an
+> explicit `Ctrl+S` save, and refusal to overwrite a file that changed underneath you.
+>
+> **Not yet:** search, delete, undo, and any memory of where you were when you last closed
+> the app. Those are the next things worth building, not oversights.
 
 ## Requirements
 
@@ -130,6 +137,7 @@ platform — electron-builder does not cross-compile these targets.
 | `dev:isolation:*`       | `off` / `status` for that routing (Windows only)  |
 | `build`                 | Typecheck, then bundle main, preload and renderer |
 | `start`                 | Run the bundled output as a production app        |
+| `test` / `test:watch`   | Vitest over the model, codec, store and scripts   |
 | `typecheck`             | Typecheck both the Node and the web project       |
 | `lint` / `lint:fix`     | ESLint over the whole repo                        |
 | `format`/`format:check` | Prettier write / verify                           |
@@ -157,17 +165,24 @@ The renderer reaches the main process only through the API the preload script pu
 `window`. Channel names live in `src/shared/constants.ts` and payload types in
 `src/shared/types`, so both ends are checked against one definition.
 
-| Channel               | Renderer call                     | Does                                               |
-| --------------------- | --------------------------------- | -------------------------------------------------- |
-| `project:loadDefault` | `window.projectApi.loadDefault()` | Reads the development default workspace, no dialog |
-| `project:open`        | `window.projectApi.open()`        | Prompts for a file, reads it, parses it            |
+| Channel                      | Renderer call                     | Does                                                    |
+| ---------------------------- | --------------------------------- | ------------------------------------------------------- |
+| `project:loadDefault`        | `window.projectApi.loadDefault()` | Reads the development default workspace, no dialog      |
+| `project:open`               | `window.projectApi.open()`        | Prompts for a file, reads it, parses it                 |
+| `project:save`               | `window.projectApi.save(request)` | Writes atomically, refusing a file that changed on disk |
+| `project:reload`             | `window.projectApi.reload(token)` | Re-reads the file behind an open project                |
+| `project:setDirty`           | `window.projectApi.setDirty()`    | Tells main whether closing would discard work           |
+| `project:requestSave` (+ \*) | `onSaveRequested(handler)`        | Main asks the renderer to save, and hears how it went   |
 
-Neither channel takes a path. The only two files reachable are the one the user picks in the
-dialog and the fixed default, so the renderer cannot name a file for `readFile` to open.
+**No channel takes a path.** Writing is addressed by an opaque **token** issued when a file
+was opened, so the only files reachable are the fixed default and whatever the user picked
+in a dialog — a compromised renderer can reach "files this application already opened", not
+the filesystem. Every outcome, including a dismissed picker, an unreadable file, invalid
+JSON, or a save refused because the file changed underneath, arrives as a value in a
+discriminated union rather than a thrown error.
 
-Every outcome — including a dismissed picker, unreadable file, or invalid JSON — comes back as a
-value in a discriminated union rather than a thrown error, because a rejected `invoke` reaches the
-renderer wrapped in Electron's own error text.
+That union shape is deliberate: a rejected `invoke` would reach the renderer wrapped in
+Electron's own error text, which is not something a user can be shown.
 
 ### Path aliases
 
@@ -196,12 +211,17 @@ branch — not retrofitted afterwards. Each document is named `<NNN>-<feature-sl
 **Goal** · **Context** · **Architecture decisions** · **Files changed** · **Verification checklist**
 · **Out of scope** · **Future considerations**
 
-| Milestone                                                                         | What it added                        |
-| --------------------------------------------------------------------------------- | ------------------------------------ |
-| 001 — foundation                                                                  | Electron + React shell (this README) |
-| [002 — open and display project](docs/milestones/002-open-and-display-project.md) | The first IPC surface, and the tree  |
-| [003 — Music Brain Explorer UI](docs/milestones/003-music-brain-explorer-ui.md)   | The explorer: typed nodes, not JSON  |
-| [004 — Canvas View](docs/milestones/004-canvas-view.md)                           | The canvas: the workspace beside it  |
+| Milestone                                                                         | What it added                          |
+| --------------------------------------------------------------------------------- | -------------------------------------- |
+| 001 — foundation                                                                  | Electron + React shell (this README)   |
+| [002 — open and display project](docs/milestones/002-open-and-display-project.md) | The first IPC surface, and the tree    |
+| [003 — Music Brain Explorer UI](docs/milestones/003-music-brain-explorer-ui.md)   | The explorer: typed nodes, not JSON    |
+| [004 — Canvas View](docs/milestones/004-canvas-view.md)                           | The canvas: the workspace beside it    |
+| [005 — Live Work Loop](docs/milestones/005-live-work-loop.md)                     | Editing, status, progress, safe saving |
+
+Milestone 005 also has an [acceptance record](docs/validation/005-live-work-loop-final-acceptance.md)
+covering how it was verified, what the product owner accepted on 2026-10-31, and which
+limitations were knowingly carried forward.
 
 ## Notes
 
@@ -219,22 +239,28 @@ processes), any Electron binary starts in plain Node mode and fails with
 `Cannot read properties of undefined (reading 'whenReady')`. Launch from a normal
 terminal, or unset the variable.
 
-## Deliberately not included yet
+## State, and what is deliberately still absent
 
-No router, application state management, persistence layer, test runner, or CSP. Application
-state is four `useState` calls in `src/renderer/src/App.tsx` — the open project, an error,
-whether the startup load is still running, and the selected node — plus expansion owned by
-the tree. Selection lives in `App` because both panes read it and both may set it.
+Milestone 005 replaced the `useState` cluster this section used to describe. The open
+project now lives in one reducer behind `WorkspaceProvider`, which owns the editable model
+and whether it matches disk; the in-flight editing _interaction_ — menu, dialogs, inline
+rename, inspector — lives in `EditingProvider`. Three things stayed exactly where they were,
+because they are genuinely separate concepts with separate owners: **selection** in `App`
+(both panes read it and both may set it), **expansion** in the tree, and the **Canvas root**
+derived rather than stored.
 
-`@xyflow/react` is the one runtime dependency beyond React, and it renders the Canvas. It
-brings `zustand` with it as an internal store for its own viewport and node state; that is
-the library's business, not the application's, and it is the only sense in which the
-paragraph above is qualified.
+The project document is no longer arbitrary JSON. `ProjectState` is a typed, canonical model
+with stable node identity, and the codec round-trips unknown fields, key order and line
+endings so that editing one title produces a one-line diff.
 
-The project document is still arbitrary JSON rather than a typed model. `ProjectDocument`
-in `src/shared/types` is the single alias that changes when it becomes one — see
-[milestone 002](docs/milestones/002-open-and-display-project.md) for why the IPC contract
-is written so that swap does not reach it.
+Still absent on purpose: **no router, no CSP, no undo stack, no search index, and no
+persisted UI state** — nothing remembers which rows were expanded or what was selected when
+the app last closed.
+
+Runtime dependencies are four: React and React DOM; `@xyflow/react`, which renders the
+Canvas and brings `zustand` with it as an internal store for its own viewport state — the
+library's business, not the application's; and `write-file-atomic`, which is what makes a
+save unable to leave a half-written knowledge base behind. Tests run on `vitest`.
 
 ## Project files for development
 

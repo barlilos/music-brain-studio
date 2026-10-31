@@ -310,17 +310,138 @@ full, with the measurement that found it and the verification that closed it.
 Finding it late is an argument for this document existing, not against merging —
 the milestone is stronger than it was when the first pass called it done.
 
+## Human acceptance — 2026-10-31
+
+Recorded after a hands-on session run by the product owner against an isolated
+disposable copy. The real knowledge base was never opened.
+
+### Exactly what was accepted
+
+> **M005 is accepted as the current editing foundation.**
+>
+> This is **not** acceptance of the product as a finished daily-use experience,
+> and it does **not** mean every usability detail passed.
+
+That wording is the scope of record. Several usability findings were reported in
+the same session and are listed below; none of them blocks this milestone, and
+none is addressed in this PR.
+
+### Session environment
+
+|                         |                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| Launch                  | `pnpm dev:isolated --project-file=… --remoteDebuggingPort=…` — `pnpm dev` was never used |
+| Project file            | `%TEMP%\mbs-acceptance-2026-10-31-insaint\insaint-acceptance-2026-10-31.json`            |
+| Why that filename       | deliberately distinctive, so the header itself proves the real file is not open          |
+| Target desktop          | index 3 (Windows Desktop 4), following the workspace's VS Code window                    |
+| Active desktop          | 1 at launch — **not switched**; focus was handed back after the window moved             |
+| Copy at start           | `c95a33e9…b998a` (byte-identical to the real file)                                       |
+| Copy after the session  | `ebb859c3…73ae6`                                                                         |
+| `data/music-brain.json` | `c95a33e9…b998a` before and after — **unchanged**                                        |
+
+### What the human did
+
+Steps 1–6 of the walkthrough: created a project, bulk-captured tasks, nested
+subtasks under one of them, renamed it and promoted it Task → Project, moved a
+task, set another to In progress, completed two tasks from the Canvas
+checkboxes, saved with `Ctrl+S`, and closed the application.
+
+Confirmed afterwards by inspecting the saved file — 10 added nodes, **0 removed,
+0 changed in place, 0 original ids lost**, 8,799 CRLF and 0 bare LF, top-level
+keys unchanged, 8,766 of 8,800 lines byte-identical to the original:
+
+```
+Insaint — Recording and April Show Preparation   [project]
+├── Rhythm guitar recording                      [project]       renamed, retyped
+│   ├── Prepare recording session                [task / done]
+│   ├── Record first takes                       [task / done]
+│   ├── Review takes                             [task / todo]
+│   ├── Decide stage outfits                     [task / todo]   moved in
+│   └── Check guitar noise before recording      [task / todo]
+├── Practice setlist end to end                  [task / in progress]
+├── Rehearse stage movement                      [task / todo]
+└── Service and restring guitars                 [task / todo]
+```
+
+Every item above, including _Check guitar noise before recording_, came from the
+walkthrough script the session was given. None of it is evidence about what work
+a user would discover unprompted.
+
+### What the human did **not** do — and who verified it instead
+
+**The reopen step (7) was not performed by the human.** It was verified by the
+agent, and the two are not interchangeable: the check below establishes that the
+file loads correctly, not that reopening _feels_ right.
+
+|                 |                                                                         |
+| --------------- | ----------------------------------------------------------------------- |
+| Verified by     | agent, via CDP against a fresh isolated process                         |
+| Method          | relaunch on the preserved copy, read-only — expansion only, no mutation |
+| Copy hash after | `ebb859c3…73ae6` — unchanged, so nothing was edited or reset            |
+
+Result: the fresh process opened **clean** (`Saved`, not dirty, no banners, not
+read-only) and the root card read `Project · 402 open · 1 in progress · 2 done`,
+so In-progress and Done both aggregate to the root across a restart. The whole
+saved tree was present at the right depths, with exactly the two completed tasks
+struck through. Expanding rows left the project clean, confirming expansion is
+view state and does not dirty the model.
+
+The same check also measured the known gap: **0 rows expanded, nothing selected,
+Canvas at the project root.** Nothing about where the user was is restored.
+
+### Usability findings reported in this session
+
+Reported by the product owner, **deliberately not addressed in this PR**. They
+are inputs to a design pass, not defects blocking M005.
+
+1. **Creation feedback.** A newly created project is hard to locate. Consider
+   selecting and revealing a new container, opening its Canvas, and marking it
+   with a temporary highlight.
+2. **Empty containers.** An empty container needs a visible anchor and an
+   explicit _Add first task_ action. Right-click may remain a shortcut, not the
+   only route.
+3. **Complete a branch.** An explicit action to complete a project or task
+   together with all its descendants, with recovery/Undo and a clear count of
+   affected items. "All currently known children are done" must **not** silently
+   mean the project is finished — that distinction is the product's psychological
+   core.
+4. **Move destination search.** Results were confusing. Case sensitivity is
+   suspected but **unverified**; matching against ancestor paths may explain the
+   surprising results. Needs clearer item types, paths, and an explanation of why
+   each result matched.
+5. **Status visibility.** _In progress_ is not clear enough. Needs stronger
+   semantic colour, icon and text distinctions, and must not rely on an
+   indeterminate checkbox alone.
+6. **Bulk operations.** Multi-selection and multi-item actions are wanted. Shift
+   selection, rectangle selection and dragging are candidate interactions, not
+   approved scope.
+7. **Design direction.** The dynamic contextual Canvas is a valued strength.
+   Visual clarity, hierarchy, status and completion feedback are integral to the
+   product's purpose rather than decoration, so a dedicated design pass should
+   happen **before** substantial feature expansion. This supersedes the earlier
+   assessment that a redesign was unwarranted.
+
+### Known limitations at merge
+
+Carried forward, with no claim that any is solved:
+
+- no search, filter, or jump-to-node;
+- no delete and no undo — a mis-capture can only be renamed;
+- no resumption of expansion, selection or Canvas root across launches;
+- Canvas framing with many children: at 14 children the zoom floor is reached,
+  the child column overflows the pane, and the first card lays out behind the
+  header;
+- count badges disappear from a row once it is expanded;
+- read-only projects cannot be reloaded in-app;
+- the renderer bundle is past Vite's size warning threshold.
+
 ## Remaining actions before merge
 
-1. Human review of PR #5 — it currently has no GitHub review, and the review of
-   record was lost with the deleted conversations.
+1. ~~Human review of PR #5~~ — recorded above on 2026-10-31.
 2. Mark PR #5 ready for review (it is still a draft).
 3. Squash-merge, as intended for this branch.
 4. Note that `23e09c6` carries the only change to real data and lands with this
    merge or not at all.
-
-Not required for merge, and deliberately left for later: Canvas column overflow;
-read-only projects cannot be reloaded in-app; and the renderer bundle size.
 
 Worth considering in a later milestone, now that the bypass is understood: the
 application ships Electron's stock menu, so `View → Reload` is offered to a user
