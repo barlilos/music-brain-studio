@@ -2,8 +2,9 @@
 
 **Written:** 2026-11-01, on branch `design/interaction-model-exploration`, from `a27678a`
 (`main` is `89e5a60`, the M005 squash merge).
-**Status:** **proposal awaiting design review. No decision on this page is approved yet.**
-The decisions log at the end is empty on purpose and is filled in only after review.
+**Status:** **reviewed visually — both directions rejected as the primary visual direction (see §9).**
+The functional findings and the shared model remain proposals; [`003`](003-living-progress-graph.md)
+continues the exploration.
 **Mockups:** [Music Brain Studio — Design Exploration 01](https://claude.ai/artifact/TEhAs4i1tZ9fKkRhGTUJQk)
 (a private Claude Design canvas; 16 artboards in three rows).
 
@@ -167,4 +168,7 @@ Each slice is independently useful on the 548-node file.
 
 ## 9. Decisions log
 
-_Empty until the design review._
+- **2026-11-01 (product owner):** Directions A and B are both rejected as the primary visual
+  direction; they read as a conventional task manager. Their functional findings (§1, §4) stand. The
+  visual exploration continues in [`003`](003-living-progress-graph.md); decisions 2–6 above carry
+  over there.
