@@ -1,7 +1,8 @@
 # 003 — Design exploration 02: Living Progress Graph
 
 **Written:** 2026-11-01, on branch `design/living-progress-graph`, from `0ebc367` (handoff 002).
-**Status:** **proposal awaiting design review. No decision on this page is approved yet.**
+**Status:** design reviewed — **R1 selected** (2026-11-02, see §10); implemented as
+[milestone 006](../milestones/006-living-progress-graph.md), awaiting hands-on evaluation.
 **Mockups:** [Music Brain Studio — Design Exploration 02: Living Progress Graph](https://claude.ai/artifact/64WK348xfxvov7cyD9HNAo)
 (a private Claude Design canvas; 18 artboards in five rows).
 
@@ -240,4 +241,13 @@ The example is **April Show**: a saved _view_ over existing branches.
 
 - **2026-11-01 (product owner):** 002 Directions A and B are rejected as the primary visual direction.
   Their functional findings are kept (see §1).
-- _Further entries after the design review._
+- **2026-11-02 (product owner):** Direction **R1** selected for implementation. The first
+  vertical slice is [milestone 006](../milestones/006-living-progress-graph.md). It resolves
+  decisions 4–7 provisionally, for evaluation through use:
+  - **4:** "new" means added this session; nothing is persisted.
+  - **5:** the Explorer is a drawer on the left rail.
+  - **6:** dark by default.
+  - **7:** Finished is a stored `finishedAt` on any branch.
+
+  Decisions 2 and 3 were taken as R1 draws them: seeds re-sort into the heart, and the brain
+  map uses bubbles. Decision 8 is deferred.

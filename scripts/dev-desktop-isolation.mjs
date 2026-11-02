@@ -42,7 +42,7 @@
 
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import {
   DEV_PROJECT_FILE_ENV,
   createIsolatedWorkspace,
@@ -86,6 +86,18 @@ const PROJECT_FILE_FLAG = '--project-file'
 function requestedProjectFile() {
   const arg = process.argv.slice(3).find((a) => a.startsWith(`${PROJECT_FILE_FLAG}=`))
   return arg === undefined ? null : arg.slice(PROJECT_FILE_FLAG.length + 1)
+}
+
+/**
+ * Seed the fresh disposable copy from a different file than the real knowledge
+ * base — `pnpm dev:demo` uses it for the Living Progress Graph fixture. The seed
+ * is only ever copied, never opened, so it is as safe as the default path.
+ */
+const SEED_FILE_FLAG = '--seed-file'
+
+function requestedSeedFile() {
+  const arg = process.argv.slice(3).find((a) => a.startsWith(`${SEED_FILE_FLAG}=`))
+  return arg === undefined ? null : arg.slice(SEED_FILE_FLAG.length + 1)
 }
 
 /** A status file older than this means the watcher is gone, not merely quiet. */
@@ -476,11 +488,12 @@ function launchDevServer({ disableRoutingOnExit, isolateData }) {
    * anything inside `data/`, and refuses to invent a file that is not there.
    */
   const requested = requestedProjectFile()
+  const seed = requestedSeedFile()
   const workspace = !isolateData
     ? null
     : requested !== null
       ? reuseIsolatedWorkspace(requested)
-      : createIsolatedWorkspace()
+      : createIsolatedWorkspace(seed === null ? undefined : resolve(process.cwd(), seed))
 
   if (isolateData && requested !== null && workspace === null) {
     fail(`${PROJECT_FILE_FLAG} was refused: ${requested}`, [
@@ -520,8 +533,9 @@ function launchDevServer({ disableRoutingOnExit, isolateData }) {
   const passThrough = process.argv
     .slice(3)
     .filter((arg, index) => !(index === 0 && arg === '--'))
-    // `--project-file` is this launcher's own, not electron-vite's.
+    // `--project-file` and `--seed-file` are this launcher's own, not electron-vite's.
     .filter((arg) => !arg.startsWith(`${PROJECT_FILE_FLAG}=`))
+    .filter((arg) => !arg.startsWith(`${SEED_FILE_FLAG}=`))
   if (passThrough.length > 0) log(`Passing to electron-vite: ${passThrough.join(' ')}`)
 
   const child = spawn(process.execPath, [ELECTRON_VITE, 'dev', ...passThrough], {

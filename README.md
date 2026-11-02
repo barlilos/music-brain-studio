@@ -3,14 +3,17 @@
 Desktop application for managing a hierarchical JSON knowledge base for music projects,
 research, tasks and creative workflows.
 
-> **Status: early, but writable.** The app opens into a two-pane workspace: an Explorer
-> tree for finding things, and a Canvas that shows the selected node and its immediate
-> children as a graph. **The Canvas is the primary workspace; the Explorer is a navigation
-> aid.**
+> **Status: early, but writable.** Since milestone 006 the app opens into the **Living
+> Progress Graph**: the knowledge base as a map of circular regions, where completed work
+> gathers as a green heart inside each branch and newly discovered work lands on the rim.
+> Click a bubble to unfold it in place into a working panel; double-click to make it the
+> centre; `Esc` steps back out. The M005 Explorer is a drawer on the left rail, and the M005
+> Explorer + Canvas split stays one click away as the classic view.
 >
 > Since milestone 005 the project can be **edited and saved**: add, bulk-add, rename,
 > change type, move, and set Todo / In progress / Done, with recursive work counts, an
 > explicit `Ctrl+S` save, and refusal to overwrite a file that changed underneath you.
+> Milestone 006 adds a declared **Finished** state for branches.
 >
 > **Not yet:** search, delete, undo, and any memory of where you were when you last closed
 > the app. Those are the next things worth building, not oversights.
@@ -133,6 +136,7 @@ platform — electron-builder does not cross-compile these targets.
 | ----------------------- | ------------------------------------------------- |
 | `dev`                   | Dev server + Electron, on your current desktop    |
 | `dev:isolated`          | Same, routed away from your active desktop        |
+| `dev:demo`              | `dev:isolated` on a fresh copy of the 006 demo    |
 | `dev:isolation:setup`   | Install/repair the local routing toolkit          |
 | `dev:isolation:*`       | `off` / `status` for that routing (Windows only)  |
 | `build`                 | Typecheck, then bundle main, preload and renderer |

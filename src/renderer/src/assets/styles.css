@@ -1,1 +1,12 @@
 @import 'tailwindcss';
+
+/*
+ * Dark by default (Living Progress Graph R1). The `dark:` variants follow the
+ * `dark` class on <html> rather than the OS setting, so every existing dialog
+ * and panel renders on the same calm ground as the graph.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: dark;
+}

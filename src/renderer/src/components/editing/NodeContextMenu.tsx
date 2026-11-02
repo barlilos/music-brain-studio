@@ -18,6 +18,7 @@ import { useEditing } from '@renderer/state/editingContext'
 import { presentationFor } from '@renderer/components/explorer/nodeKinds'
 import { NODE_KIND_OPTIONS } from '@renderer/components/editing/nodeKindOptions'
 import { WORK_STATUS_LABELS } from '@renderer/components/editing/workStatusLabels'
+import { today } from '@renderer/components/graph/graphText'
 
 /** Keeps the menu on screen when it is opened near an edge. */
 const EDGE_MARGIN = 8
@@ -180,6 +181,20 @@ export function NodeContextMenu(): JSX.Element | null {
                 </div>
               )}
             </>
+          )}
+
+          {/*
+            Finished is declared, never derived — so it is offered on branches
+            (anything that does not carry a work state) and only ever by hand.
+          */}
+          {!carriesStatus && (
+            <MenuItem
+              label={node.finishedAt === undefined ? 'Mark finished' : 'Reopen'}
+              onClick={() => {
+                commands.setFinished(nodeId, node.finishedAt === undefined ? today() : null)
+                closeMenu()
+              }}
+            />
           )}
 
           <MenuSeparator />

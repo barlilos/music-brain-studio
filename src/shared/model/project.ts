@@ -73,6 +73,16 @@ export interface ProjectNode {
    * lower-cased so the presentation registry has one key per kind.
    */
   persistedKind: string | undefined
+  /**
+   * The day the user declared this finished, as `YYYY-MM-DD`, or `undefined`.
+   *
+   * **Declared, never derived.** A branch whose known tasks are all Done is
+   * "nothing open right now", which is a fact about today's list and reverts the
+   * moment more work is discovered. Finished is a decision the user makes, and
+   * nothing in the application sets it on their behalf — a parent never finishes
+   * because its children did.
+   */
+  finishedAt: string | undefined
   /** `null` for a top-level node. Explicit, never derived from the id. */
   parentId: NodeId | null
   /** Children in order. The order is the user's and is never sorted. */

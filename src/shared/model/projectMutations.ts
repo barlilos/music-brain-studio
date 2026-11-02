@@ -148,6 +148,7 @@ function buildNode(input: NodeInput, id: NodeId, parentId: NodeId | null): Proje
     tags: normalizeTags(input.tags) ?? [],
     notes: input.notes ?? '',
     persistedKind: undefined,
+    finishedAt: undefined,
     parentId,
     childIds: []
   }
@@ -283,6 +284,29 @@ export function setNodeStatus(
 
   const nodes = draft(state)
   put(nodes, node, { status, persistedStatus: undefined })
+
+  return succeed(state, nodes, state.rootIds)
+}
+
+/**
+ * Declares a node finished on a given day, or reopens it with `null`.
+ *
+ * The only way `finishedAt` changes. Nothing calls this as a side effect of a
+ * status change — completing the last task in a branch makes it "nothing open
+ * right now", which is derived, and leaves this field exactly as it was.
+ * Descendants are not touched either: finishing a project says nothing about
+ * the tasks inside it, which keep whatever state they had.
+ */
+export function setNodeFinished(
+  state: ProjectState,
+  nodeId: NodeId,
+  finishedAt: string | null
+): MutationResult {
+  const node = state.nodesById.get(nodeId)
+  if (node === undefined) return fail('unknownNode', 'That entry no longer exists.')
+
+  const nodes = draft(state)
+  put(nodes, node, { finishedAt: finishedAt ?? undefined })
 
   return succeed(state, nodes, state.rootIds)
 }

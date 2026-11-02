@@ -28,6 +28,8 @@ export interface WorkspaceCommands {
   changeType: (nodeId: NodeId, kind: NodeKind) => void
   setStatus: (nodeId: NodeId, status: WorkStatus) => void
   move: (nodeId: NodeId, newParentId: NodeId | null, index?: number) => void
+  /** Declares a branch finished on `finishedAt` (`YYYY-MM-DD`), or reopens it with `null`. */
+  setFinished: (nodeId: NodeId, finishedAt: string | null) => void
 
   /**
    * Writes the project. Resolves to `true` when the work is safely on disk —
@@ -55,6 +57,16 @@ export interface WorkspaceContextValue {
   isDirty: boolean
   canSave: boolean
   isEditable: boolean
+  /**
+   * Nodes created since this project was opened — the graph's "new" marks.
+   *
+   * Session-scoped on purpose. The knowledge base records no creation dates,
+   * and "new since you last looked" needs somewhere to remember when that was
+   * (handoff 003, decision 4). Until that is decided, the honest claim the
+   * application can make is "added this session", and it makes it without
+   * writing anything to the file.
+   */
+  createdThisSession: ReadonlySet<NodeId>
   commands: WorkspaceCommands
 }
 

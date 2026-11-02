@@ -25,6 +25,7 @@ import {
   changeNodeType,
   createNodes,
   moveNode,
+  setNodeFinished,
   setNodeStatus,
   updateNode,
   type MutationResult,
@@ -107,6 +108,7 @@ export type WorkspaceAction =
   | { type: 'changeNodeType'; nodeId: NodeId; kind: NodeKind }
   | { type: 'setNodeStatus'; nodeId: NodeId; status: WorkStatus }
   | { type: 'moveNode'; nodeId: NodeId; newParentId: NodeId | null; index?: number }
+  | { type: 'setNodeFinished'; nodeId: NodeId; finishedAt: string | null }
   | { type: 'saveStarted' }
   | { type: 'saved'; diskRevision: string; modelRevision: number }
   | { type: 'saveConflicted' }
@@ -206,6 +208,9 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
       return applyMutation(state, (c) =>
         moveNode(c.state, action.nodeId, action.newParentId, action.index)
       )
+
+    case 'setNodeFinished':
+      return applyMutation(state, (c) => setNodeFinished(c.state, action.nodeId, action.finishedAt))
 
     case 'saveStarted':
       return { ...state, isSaving: true, error: null }
