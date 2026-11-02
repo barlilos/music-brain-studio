@@ -70,6 +70,12 @@ export interface ExplorerNode {
   status: WorkStatus | undefined
   /** Free-text labels, already filtered to non-empty strings. Possibly empty. */
   tags: string[]
+  /**
+   * The day the user declared this finished, or `undefined`. See
+   * `ProjectNode.finishedAt` — declared, never derived from the children.
+   * Optional so a hand-built tree need not mention it.
+   */
+  finishedAt?: string | undefined
   /** Child nodes, already adapted. Empty for leaves. */
   children: ExplorerNode[]
 }

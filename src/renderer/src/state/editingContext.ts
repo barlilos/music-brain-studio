@@ -19,7 +19,7 @@ import { createContext, use } from 'react'
 import type { NodeId } from '@shared/model/project'
 
 /** Which view an interaction was invoked from. */
-export type EditingSurface = 'explorer' | 'canvas'
+export type EditingSurface = 'explorer' | 'canvas' | 'graph'
 
 /** A menu target. `nodeId` is `null` for the project itself. */
 export interface MenuTarget {

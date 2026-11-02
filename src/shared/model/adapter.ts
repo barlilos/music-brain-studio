@@ -151,6 +151,7 @@ function toExplorerNode(node: ProjectDocument, id: string): ExplorerNode {
     kind: readKind(node),
     status: readStatus(node),
     tags: readTags(node),
+    finishedAt: nonEmptyString(field(node, 'finishedAt')),
     children
   }
 }

@@ -60,6 +60,7 @@ function toExplorerNodes(state: ProjectState, ids: readonly NodeId[]): ExplorerN
       kind: node.kind,
       status: node.status,
       tags: node.tags,
+      finishedAt: node.finishedAt,
       children: toExplorerNodes(state, node.childIds)
     })
   }

@@ -22,6 +22,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
   type JSX,
   type ReactNode
 } from 'react'
@@ -58,6 +59,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
    */
   const latest = useRef(state)
   latest.current = state
+
+  /** See `WorkspaceContextValue.createdThisSession`. Reset whenever a different file opens. */
+  const [createdThisSession, setCreatedThisSession] = useState<ReadonlySet<NodeId>>(new Set())
+  const token = state.source?.token
+  useEffect(() => {
+    setCreatedThisSession(new Set())
+  }, [token])
 
   /*
    * One projection per revision.
@@ -210,6 +218,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
       if (inputs.length === 0) return []
       const ids = mint(inputs.length)
       dispatch({ type: 'createNodes', parentId, inputs, ids })
+      setCreatedThisSession((previous) => new Set([...previous, ...ids]))
       return ids
     }
 
@@ -222,6 +231,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
       setStatus: (nodeId, status) => dispatch({ type: 'setNodeStatus', nodeId, status }),
       move: (nodeId, newParentId, index) =>
         dispatch({ type: 'moveNode', nodeId, newParentId, index }),
+      setFinished: (nodeId, finishedAt) =>
+        dispatch({ type: 'setNodeFinished', nodeId, finishedAt }),
 
       save: async () => {
         // `failed` covers both a refused write and a revision conflict; either
@@ -254,9 +265,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
       isDirty: dirty,
       canSave: canSave(state),
       isEditable: state.content?.mode === 'editable',
+      createdThisSession,
       commands
     }),
-    [state, projection, dirty, commands]
+    [state, projection, dirty, createdThisSession, commands]
   )
 
   return <WorkspaceContext value={value}>{children}</WorkspaceContext>

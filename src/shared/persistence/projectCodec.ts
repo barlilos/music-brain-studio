@@ -39,7 +39,7 @@ type JsonObject = { [key: string]: JsonValue }
  * did not have — so a task that acquires notes gets them where a reader expects,
  * rather than wherever iteration happened to put them.
  */
-const MODELED_KEYS = ['id', 'title', 'nodeType', 'status', 'tags', 'notes'] as const
+const MODELED_KEYS = ['id', 'title', 'nodeType', 'status', 'tags', 'notes', 'finishedAt'] as const
 type ModeledKey = (typeof MODELED_KEYS)[number]
 
 const MODELED = new Set<string>(MODELED_KEYS)
@@ -200,6 +200,7 @@ function importNode(
     tags,
     notes: typeof raw['notes'] === 'string' ? raw['notes'] : '',
     persistedKind,
+    finishedAt: nonEmptyString(raw['finishedAt']),
     parentId,
     childIds: []
   }
@@ -306,6 +307,11 @@ function modeledValue(
       return wasPresent || node.tags.length > 0 ? [...node.tags] : undefined
     case 'notes':
       return wasPresent || node.notes.length > 0 ? node.notes : undefined
+    case 'finishedAt':
+      // Omitted rather than written empty when the user reopens a branch: an
+      // absent key and "not finished" mean the same thing, and only one of
+      // them leaves no trace in a file that never used the field.
+      return node.finishedAt
   }
 }
 

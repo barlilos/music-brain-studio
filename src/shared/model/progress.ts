@@ -97,3 +97,30 @@ export function summarizeProgress(roots: readonly ExplorerNode[]): ProgressIndex
 
   return { byId, total }
 }
+
+/**
+ * Where a branch stands, as one of four words — never as a number.
+ *
+ * - `finished`: the user declared it (`finishedAt`). Wins over everything,
+ *   including open work inside it; the UI says so rather than hiding either.
+ * - `nothingOpen`: there is known work and all of it is Done. **Derived**, and
+ *   only true for today's list: one discovered task turns it back to `open`.
+ *   It is never promoted to `finished` — a parent does not finish itself.
+ * - `open`: there is known work and some of it is not Done.
+ * - `empty`: nothing countable inside yet.
+ */
+export type RegionState = 'finished' | 'nothingOpen' | 'open' | 'empty'
+
+export function regionStateOf(
+  summary: ProgressSummary | undefined,
+  finishedAt: string | undefined
+): RegionState {
+  if (finishedAt !== undefined) return 'finished'
+  if (summary === undefined || !hasKnownWork(summary)) return 'empty'
+  return summary.todo === 0 && summary.inProgress === 0 ? 'nothingOpen' : 'open'
+}
+
+/** Known work that is not Done yet. */
+export function openCount(summary: ProgressSummary): number {
+  return summary.todo + summary.inProgress
+}
